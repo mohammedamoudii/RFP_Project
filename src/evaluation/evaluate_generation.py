@@ -675,15 +675,51 @@ def build_judge_messages(
     system_message = """
 You are evaluating a retrieval-augmented RFP proposal.
 
-Be strict and evidence-based.
+Be strict, consistent, and evidence-based.
 Do not reward writing style when factual support is missing.
 
 Grounding rules:
-1. Client requirement statements may be supported by the extracted requirements.
-2. Company capability, experience, methodology, pricing, team, implementation, and outcome claims must be supported by retrieved proposal knowledge.
-3. A citation is supported only when its claim is directly supported by the exact cited chunk.
-4. Do not assume facts that are not explicitly present.
-5. Do not infer named methodologies such as Agile unless the retrieved text explicitly states them.
+1. Statements describing the current client's requirements may be
+   supported by the extracted client requirements.
+2. Historical company capability, experience, methodology, pricing,
+   team, and outcome claims must be supported by proposal knowledge.
+3. For top-level citation assessment, the backend-controlled
+   evidence_quote is the primary evidence source.
+4. A citation claim is supported when every factual proposition in the
+   claim is explicitly stated or clearly entailed by the evidence_quote.
+5. A claim may be narrower, shorter, or less detailed than the evidence.
+   Do not penalize it for omitting dates, program names, audiences,
+   outcomes, or other details that the claim does not assert.
+6. Missing detail is not an unsupported claim.
+7. Mark a citation unsupported only when the claim adds a material fact
+   that is absent from the evidence, contradicts the evidence, or refers
+   to an unrelated subject.
+8. Do not require evidence for an outcome, benefit, methodology, date,
+   sector, or capability unless the claim itself asserts it.
+9. Use the complete cited chunk only to clarify context. Do not require
+   the claim to repeat all information from the chunk.
+10. Do not infer named methodologies such as Agile unless explicitly
+    stated in the evidence.
+11. Overall faithfulness and citation support are separate evaluations.
+12. Overall faithfulness must evaluate every factual assertion across
+    all narrative sections and compliance responses, not only claims
+    in the top-level citations array.
+13. A supported citation does not automatically make the full proposal
+    faithful.
+14. Inspect executive_summary, understanding_of_requirements,
+    proposed_solution, technical_approach, business_value,
+    implementation_plan, timeline, relevant_experience,
+    risk_management, and compliance_matrix responses.
+15. For unsupported_claims, quote or closely reproduce the specific
+    unsupported statement from the proposal.
+16. Do not assign faithfulness 5 when any material company claim is
+    unsupported by approved evidence or extracted requirements.
+17. Future commitments may be supported by current client requirements,
+    but claims of existing experience or capability require company
+    evidence.
+When identifying unsupported claims, report only factual assertions that
+lack support. Do not report omissions or lack of specificity as
+unsupported claims.
 """.strip()
     citation_evidence_pairs = [
         {
@@ -738,6 +774,12 @@ TOP-LEVEL CITATION EVIDENCE PAIRS:
 RETRIEVED PROPOSAL KNOWLEDGE:
 {proposal_knowledge_context}
 
+Important:
+- citation_assessment evaluates only the top-level citation claim and its
+  attached evidence_quote.
+- faithfulness evaluates the entire generated proposal.
+- Calculate these independently.
+
 Scoring guide:
 
 5 = fully supported or fully aligned
@@ -747,20 +789,77 @@ Scoring guide:
 1 = substantially unsupported or irrelevant
 
 Tasks:
-- Score faithfulness.
-- Identify unsupported company claims.
+- Score faithfulness based on factual assertions made in the proposal.
+- Identify only company claims that assert unsupported facts.
+- Do not treat omitted evidence details as unsupported claims.
 - Score answer relevance.
 - Score alignment with the extracted requirements.
 - Identify missing requirement IDs.
 - Score professional quality separately.
 - Evaluate every citation in the proposal in its original order.
 
+Overall faithfulness evaluation:
+- Evaluate the full generated proposal, independently from the citation
+  assessment.
+- Check every narrative section and compliance response.
+- Current-project commitments such as "we will provide training" may be
+  grounded in extracted client requirements.
+- Historical experience, existing capabilities, team experience,
+  previous clients, methodologies, outcomes, and expertise must be
+  grounded in proposal knowledge.
+- A correct citation does not prove that unrelated narrative claims are
+  supported.
+- List the exact unsupported proposal claims in unsupported_claims.
+- Do not return faithfulness 5 if any material factual claim is
+  unsupported.
+- If one or two material company claims are unsupported, the maximum
+  faithfulness score should normally be 3.
+- If several material claims are unsupported, the score should normally
+  be 1 or 2.
 
-- For each citation, first compare the claim directly against its evidence_quote.
+Citation support rules:
+- For each citation, compare the claim directly against its evidence_quote.
 - The evidence_quote is an exact backend-controlled passage from the cited chunk.
-- A citation is supported only when every material part of the claim is stated or clearly entailed by the evidence_quote.
-- Mark the citation unsupported when the claim adds experience level, outcomes, effectiveness, success, client sectors, or capabilities not stated in the evidence_quote.
-- Use the full cited chunk only to understand the quote's context, not to expand the claim beyond the quote.
+- Judge only the factual propositions actually asserted by the claim.
+- The claim does not need to repeat every detail contained in the evidence.
+- A claim may omit a date, program name, audience, client abbreviation,
+  project detail, or outcome and still be fully supported.
+- Missing detail or lower specificity is not an unsupported addition.
+- Mark supported=true when every factual proposition in the claim is
+  explicitly stated or clearly entailed by the evidence_quote.
+- Mark supported=false only when the claim adds a material unsupported
+  fact, contradicts the evidence, or discusses an unrelated subject.
+- Do not require evidence for an outcome, benefit, sector, methodology,
+  date, program name, or other detail unless the claim asserts it.
+- Additional information in the evidence does not make a narrower claim
+  unsupported.
+- Use the complete cited chunk only to clarify the evidence_quote's
+  context, not to require extra detail in the claim.
+
+Citation scoring:
+- 5: The claim is directly and completely supported.
+- 4: The claim is fully supported through a reasonable paraphrase.
+- 3: The main claim is supported but contains a minor unsupported addition.
+- 2: The claim contains an important unsupported addition or is only
+  partially related to the evidence.
+- 1: The claim is unsupported, contradicted, or unrelated.
+
+Example:
+Claim: "The company collaborated with a university to provide training
+in AI-enhanced data engineering."
+Evidence: "The company collaborated with the university since 2020,
+offering a data science program to train professionals in AI-enhanced
+data engineering."
+Decision: supported=true because every fact asserted in the claim is
+supported. The claim is not required to mention the date or exact
+program name.
+
+Unsupported-claim rules:
+- List only factual assertions that add unsupported information.
+- Do not list an omission, lack of detail, or a narrower paraphrase as
+  an unsupported claim.
+- Do not write rationales such as "the claim does not specify the
+  program" when the claim never asserted a specific program.
 
 - Use citation_index values starting from 1.
 """.strip()
@@ -884,6 +983,15 @@ def build_derived_metrics(
             continue
 
         seen_indexes.add(citation_index)
+
+        support_score = int(
+            assessment.get("support_score", 1)
+        )
+
+        assessment["supported"] = (
+            support_score >= 4
+        )
+
         valid_assessments.append(
             assessment
         )
@@ -899,11 +1007,13 @@ def build_derived_metrics(
         for item in valid_assessments
     ]
 
-    # Missing assessments are conservatively treated
-    # as unsupported.
-    citation_support_rate = ratio(
-        supported_count,
-        expected_citation_count,
+    citation_support_rate = (
+        ratio(
+            supported_count,
+            expected_citation_count,
+        )
+        if expected_citation_count > 0
+        else 1.0
     )
     ## new updated 
     missing_assessment_count = max(
@@ -1218,6 +1328,46 @@ def print_summary(
         ],
     )
 
+def reconcile_requirement_alignment(
+    judge_result: dict[str, Any],
+    deterministic: dict[str, Any],
+) -> list[str]:
+    """
+    Requirement-ID coverage is deterministic.
+
+    The LLM may judge response quality, but it must not declare a
+    requirement missing when the compliance matrix contains its ID.
+    """
+    warnings = []
+
+    deterministic_missing = deterministic.get(
+        "missing_requirement_ids",
+        [],
+    )
+
+    llm_missing = judge_result.get(
+        "requirement_alignment",
+        {},
+    ).get(
+        "missing_requirement_ids",
+        [],
+    )
+
+    if set(llm_missing) != set(deterministic_missing):
+        warnings.append(
+            "LLM requirement missing IDs differed from "
+            "deterministic coverage. Deterministic IDs were used. "
+            f"LLM={llm_missing}, "
+            f"deterministic={deterministic_missing}"
+        )
+
+        judge_result[
+            "requirement_alignment"
+        ]["missing_requirement_ids"] = (
+            deterministic_missing
+        )
+
+    return warnings
 
 def main() -> None:
     load_dotenv()
@@ -1321,7 +1471,10 @@ def main() -> None:
         ),
         model=args.judge_model,
     )
-
+    consistency_warnings = reconcile_requirement_alignment(
+        judge_result=judge_result,
+        deterministic=deterministic,
+    )
     expected_citation_count = len(
         proposal.get("citations", [])
     )
@@ -1352,7 +1505,9 @@ def main() -> None:
     #         f"{judged_citation_count} citation assessments "
     #         f"for {expected_citation_count} proposal citations."
     #     )
-    warnings = []
+    warnings = list(
+        consistency_warnings
+    )
 
     raw_judged_count = len(
         judge_result.get(

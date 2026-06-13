@@ -1,0 +1,2 @@
+judge_model,requirement_coverage,mandatory_requirement_coverage,narrative_section_completion_rate,citation_id_accuracy,citation_metadata_accuracy,compliance_evidence_coverage,faithfulness_score_1_to_5,answer_relevance_score_1_to_5,requirement_alignment_score_1_to_5,professional_quality_score_1_to_5,citation_support_rate,generation_quality_composite_0_to_1
+gpt-4o-mini,1.0,1.0,1.0,1.0,1.0,0.0909,2,4,3,4,1.0,0.625

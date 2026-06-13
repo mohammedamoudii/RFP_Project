@@ -420,9 +420,19 @@ def build_current_opportunity_context(
         if req.get("source_file")
     })
 
+    current_client_name = (
+        extracted.get("client_name")
+        or extracted.get("organization_name")
+        or extracted.get("issuer_name")
+        or extracted.get("agency_name")
+        or ""
+    )
+
     return (
         f"opportunity_id: "
         f"{extracted.get('opportunity_id', '')}\n"
+        f"current_client_name: "
+        f"{current_client_name}\n"
         f"current_rfp_source_files: "
         f"{json.dumps(source_files, ensure_ascii=False)}"
     )
@@ -544,12 +554,18 @@ Historical-client separation:
 - Historical proposal documents are evidence sources only.
 - Do not treat a historical university, agency, organization, or
   project as the current client.
-- Do not describe University of Saskatchewan or USask as the current
   proposal recipient.
 - Historical client names may appear only in relevant experience and
   only when explicitly supported by approved evidence.
-- When the active client name is uncertain, use "the Client" or
-  "Children and Family Services".
+
+- CURRENT OPPORTUNITY identifies the active RFP and current client.
+- Do not treat any historical organization found in approved company
+  evidence as the current client.
+- Use the current_client_name value from CURRENT OPPORTUNITY.
+- When current_client_name is unavailable, refer to the organization
+  as "the Client".
+- Historical organization names may appear only when describing
+  documented past experience supported by approved evidence.
 
 Compliance matrix:
 - Cover every selected requirement where possible.
@@ -917,19 +933,11 @@ def validate_overbroad_company_claims(
     ]
 
     unsupported_patterns = {
-        r"\bproven methodologies\b": "proven methodologies",
-        r"\bwealth of experience\b": "wealth of experience",
-        r"\bextensive experience in the public sector\b": (
-            "public-sector experience"
+        r"\bproven methodologies\b": (
+            "potentially unsupported methodology claim"
         ),
-        r"\bsocial services sector\b": (
-            "social-services experience"
-        ),
-        r"\bcomplex data management\b": (
-            "complex data management"
-        ),
-        r"\bprogram performance reporting\b": (
-            "program-performance reporting"
+        r"\bwealth of experience\b": (
+            "potentially unsupported experience-strength claim"
         ),
         r"\bpositions us well\b": (
             "unsupported suitability conclusion"
@@ -941,7 +949,7 @@ def validate_overbroad_company_claims(
             "unsupported suitability conclusion"
         ),
         r"\bstrong track record\b": (
-            "unsupported track-record claim"
+            "potentially unsupported track-record claim"
         ),
         r"\bdemonstrat(?:e|es|ing) our capability\b": (
             "unsupported capability conclusion"
@@ -1077,8 +1085,24 @@ def print_summary(proposal: dict[str, Any], warnings: list[str]):
 
 def validate_historical_client_leakage(
     proposal: dict[str, Any],
+    current_client_name: str,
+    historical_client_names: list[str],
 ) -> list[str]:
     errors = []
+
+    current_client = normalize_match_text(
+        current_client_name
+    )
+
+    forbidden_terms = {
+        normalize_match_text(name)
+        for name in historical_client_names
+        if (
+            normalize_match_text(name)
+            and normalize_match_text(name)
+            != current_client
+        )
+    }
 
     current_client_fields = [
         "executive_summary",
@@ -1091,15 +1115,10 @@ def validate_historical_client_leakage(
         "risk_management",
     ]
 
-    forbidden_terms = [
-        "university of saskatchewan",
-        "usask",
-    ]
-
     for field in current_client_fields:
-        text = str(
+        text = normalize_match_text(
             proposal.get(field, "")
-        ).casefold()
+        )
 
         for term in forbidden_terms:
             if term in text:
@@ -1112,9 +1131,9 @@ def validate_historical_client_leakage(
         proposal.get("compliance_matrix", []),
         start=1,
     ):
-        response = str(
+        response = normalize_match_text(
             row.get("response", "")
-        ).casefold()
+        )
 
         for term in forbidden_terms:
             if term in response:
@@ -1331,9 +1350,25 @@ def main():
             f"Overbroad company claim: {error}"
             for error in claim_errors
         )
+    current_client_name = str(
+        extracted.get("client_name")
+        or extracted.get("organization_name")
+        or extracted.get("issuer_name")
+        or extracted.get("agency_name")
+        or ""
+    ).strip()
 
+    historical_client_names = proposal_context.get(
+        "historical_client_names",
+        [],
+    )
+
+    if not isinstance(historical_client_names, list):
+        historical_client_names = []
     leakage_errors = validate_historical_client_leakage(
-        proposal
+        proposal=proposal,
+        current_client_name=current_client_name,
+        historical_client_names=historical_client_names,
     )
 
     if leakage_errors:
