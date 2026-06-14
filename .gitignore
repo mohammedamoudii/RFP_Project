@@ -1,1 +1,31 @@
 .env
+# Uploaded client RFP documents
+data/raw/rfp_uploads/*
+!data/raw/rfp_uploads/.gitkeep
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+.venv/
+rfp_env/
+
+# Streamlit local settings and secrets
+.streamlit/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Local/client data and generated outputs
+data/raw/
+data/chroma/
+data/processed/
+data/evaluation/
+
+# Temporary and backup Python files
+*_backup.py
+*_before_*.py
+src/ui/rfp_app.py
+
+# Temporary atomic-write files
+*.part

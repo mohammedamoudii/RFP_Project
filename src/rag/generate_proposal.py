@@ -173,21 +173,74 @@ PROPOSAL_SCHEMA = {
     ]
 }
 
+# def build_proposal_schema(
+#     valid_chunk_ids: list[str],
+#     valid_evidence_ids: list[str],
+# ) -> dict[str, Any]:
+#     if not valid_chunk_ids:
+#         raise ValueError(
+#             "No valid proposal knowledge chunk IDs were provided."
+#         )
+
+#     if not valid_evidence_ids:
+#         raise ValueError(
+#             "No valid proposal evidence IDs were provided."
+#         )
+
+#     schema = copy.deepcopy(PROPOSAL_SCHEMA)
+
+#     citation_properties = (
+#         schema["properties"]
+#         ["citations"]
+#         ["items"]
+#         ["properties"]
+#     )
+
+#     citation_properties["chunk_id"] = {
+#         "type": "string",
+#         "enum": sorted(valid_chunk_ids),
+#         "description": (
+#             "A proposal_db chunk ID. Backend metadata "
+#             "will override this value."
+#         ),
+#     }
+
+#     citation_properties["evidence_id"] = {
+#         "type": "string",
+#         "enum": sorted(valid_evidence_ids),
+#         "description": (
+#             "Select one exact evidence ID from the approved "
+#             "proposal evidence options."
+#         ),
+#     }
+
+#     return schema
 def build_proposal_schema(
     valid_chunk_ids: list[str],
     valid_evidence_ids: list[str],
+    valid_requirement_ids: list[str],
 ) -> dict[str, Any]:
     if not valid_chunk_ids:
         raise ValueError(
-            "No valid proposal knowledge chunk IDs were provided."
+            "No valid proposal knowledge "
+            "chunk IDs were provided."
         )
 
     if not valid_evidence_ids:
         raise ValueError(
-            "No valid proposal evidence IDs were provided."
+            "No valid proposal evidence "
+            "IDs were provided."
         )
 
-    schema = copy.deepcopy(PROPOSAL_SCHEMA)
+    if not valid_requirement_ids:
+        raise ValueError(
+            "No valid requirement IDs "
+            "were provided."
+        )
+
+    schema = copy.deepcopy(
+        PROPOSAL_SCHEMA
+    )
 
     citation_properties = (
         schema["properties"]
@@ -198,19 +251,56 @@ def build_proposal_schema(
 
     citation_properties["chunk_id"] = {
         "type": "string",
-        "enum": sorted(valid_chunk_ids),
+        "enum": sorted(
+            valid_chunk_ids
+        ),
         "description": (
-            "A proposal_db chunk ID. Backend metadata "
-            "will override this value."
+            "A proposal_db chunk ID. "
+            "Backend metadata will override "
+            "this value."
         ),
     }
 
     citation_properties["evidence_id"] = {
         "type": "string",
-        "enum": sorted(valid_evidence_ids),
+        "enum": sorted(
+            valid_evidence_ids
+        ),
         "description": (
-            "Select one exact evidence ID from the approved "
-            "proposal evidence options."
+            "Select one exact evidence ID "
+            "from the approved proposal "
+            "evidence options."
+        ),
+    }
+
+    compliance_schema = (
+        schema["properties"]
+        ["compliance_matrix"]
+    )
+
+    # Require exactly one row for every
+    # selected requirement.
+    compliance_schema["minItems"] = len(
+        valid_requirement_ids
+    )
+
+    compliance_schema["maxItems"] = len(
+        valid_requirement_ids
+    )
+
+    compliance_schema[
+        "items"
+    ][
+        "properties"
+    ][
+        "requirement_id"
+    ] = {
+        "type": "string",
+        "enum": valid_requirement_ids,
+        "description": (
+            "Use one exact requirement ID "
+            "from the selected client "
+            "requirements."
         ),
     }
 
@@ -567,6 +657,44 @@ Historical-client separation:
 - Historical organization names may appear only when describing
   documented past experience supported by approved evidence.
 
+
+  
+Narrative section requirements:
+
+Executive summary:
+- Summarize the Client need, proposed response, delivery approach,
+  governance, security posture, implementation approach, and
+  documented relevant experience.
+- Do not merely repeat the compliance matrix.
+
+Understanding of requirements:
+- Group the requirements into logical themes such as procurement,
+  functional services, security, privacy, integration, support,
+  implementation, pricing, and contractual compliance.
+- Explain dependencies and areas requiring confirmation.
+
+Proposed solution:
+- Describe solution components, service boundaries, expected
+  deliverables, optional services, integrations, support, and
+  assumptions.
+- Do not claim that an unverified feature already exists.
+
+Technical approach:
+- Explain architecture, environments, identity and access,
+  data handling, security validation, testing, monitoring,
+  deployment, integration, and operational support.
+- Mark technical details requiring vendor confirmation.
+
+Implementation plan:
+- Include phases, activities, deliverables, decision gates,
+  responsible parties, dependencies, acceptance criteria,
+  documentation, training, and transition to support.
+
+Risk management:
+- Include risk, cause, impact, mitigation, monitoring approach,
+  owner or responsible role, and contingency action.
+
+
 Compliance matrix:
 - Cover every selected requirement where possible.
 - requirement_summary must accurately summarize the current requirement.
@@ -581,7 +709,15 @@ Compliance matrix:
 - When no approved company evidence directly supports the company claim,
   set evidence_source exactly to:
   "Evidence not found in knowledge base."
-
+- Never assert that the Proponent has no litigation, judgments,
+  financial instability, certifications, or regulatory findings unless
+  an approved evidence quote explicitly confirms that fact.
+- When confirmation is unavailable, state:
+  "Requires confirmation by an authorized company representative."
+- Do not invent a fixed project duration or completion date.
+- When the RFP and approved evidence do not provide a duration, state
+  that the detailed schedule will be confirmed during project planning,
+  and record this as an assumption. 
 Proposal type behavior:
 - business: emphasize delivery, value, timeline, risk, and documented
   relevant experience.
@@ -590,9 +726,40 @@ Proposal type behavior:
 - both: include both business and technical coverage.
 
 Detail level behavior:
-- concise: short but complete.
-- standard: balanced detail.
-- detailed: thorough requirement coverage without unsupported expansion.
+
+- concise:
+  Produce a short but complete proposal.
+
+- standard:
+  Produce balanced section detail and concise compliance responses.
+
+- detailed:
+  Produce a comprehensive professional proposal without repetition,
+  filler, invented facts, or unsupported claims.
+
+  Target section lengths:
+  - Executive summary: 400-600 words.
+  - Understanding of requirements: 500-800 words.
+  - Proposed solution: 700-1,000 words.
+  - Technical approach: 900-1,400 words.
+  - Business value: 500-800 words.
+  - Implementation plan: 800-1,200 words.
+  - Timeline: 300-500 words.
+  - Relevant experience: 400-700 words, limited strictly to
+    approved evidence.
+  - Risk management: 600-900 words.
+  - Each compliance matrix response: approximately 40-90 words.
+
+  For every major section:
+  - explain the approach;
+  - identify major activities and deliverables;
+  - describe controls, dependencies, and validation steps;
+  - clearly distinguish documented capabilities from proposed
+    future commitments;
+  - state required confirmations instead of inventing information.
+
+  Do not shorten sections merely because the compliance matrix is long.
+  Do not repeat the same paragraph or marketing claim to increase length.
 """.strip()
 
     return [
@@ -607,6 +774,16 @@ Detail level behavior:
     ]
 # print(f"Valid proposal citation chunk IDs: {len(valid_chunk_ids)}")
 # proposal_schema = build_proposal_schema(valid_chunk_ids)
+# def generate_proposal_with_openai(
+#     proposal_type: str,
+#     current_opportunity_context: str,
+#     requirements_context: str,
+#     evidence_context: str,
+#     detail_level: str,
+#     model: str,
+#     valid_chunk_ids: list[str],
+#     valid_evidence_ids: list[str],
+# ) -> dict[str, Any]:
 def generate_proposal_with_openai(
     proposal_type: str,
     current_opportunity_context: str,
@@ -616,8 +793,29 @@ def generate_proposal_with_openai(
     model: str,
     valid_chunk_ids: list[str],
     valid_evidence_ids: list[str],
+    valid_requirement_ids: list[str],
 ) -> dict[str, Any]:
-    client = OpenAI()
+    load_dotenv(
+        dotenv_path=(
+            Path(__file__)
+            .resolve()
+            .parents[2]
+            / ".env"
+        ),
+        override=True,
+    )
+
+    api_key = os.getenv(
+        "OPENAI_API_KEY"
+    )
+
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured."
+        )   
+    client = OpenAI(
+    api_key=api_key
+    )
     ## updated messages build messages call 
     messages = build_messages(
         proposal_type=proposal_type,
@@ -628,14 +826,37 @@ def generate_proposal_with_openai(
     )
 
     # Build the schema only after valid proposal chunk IDs are available.
+    # proposal_schema = build_proposal_schema(
+    #     valid_chunk_ids=valid_chunk_ids,
+    #     valid_evidence_ids=valid_evidence_ids,
+    # )
     proposal_schema = build_proposal_schema(
         valid_chunk_ids=valid_chunk_ids,
         valid_evidence_ids=valid_evidence_ids,
-    )
+        valid_requirement_ids=(
+            valid_requirement_ids
+        ),
+    )    
+
+    # completion = client.chat.completions.create(
+    #     model=model,
+    #     # temperature=0, ## reducted 
+    #     messages=messages,
 
     completion = client.chat.completions.create(
         model=model,
-        temperature=0, ## reducted 
+        # temperature=0,
+
+        # Encourage fuller responses.
+        verbosity="high",
+
+        # Keep enough reasoning without consuming
+        # excessive completion-token capacity.
+        reasoning_effort="medium",
+
+        # Includes visible output and reasoning tokens.
+        max_completion_tokens=60000,
+
         messages=messages,
         response_format={
             "type": "json_schema",
@@ -646,7 +867,34 @@ def generate_proposal_with_openai(
             },
         },
     )
+    finish_reason = (
+        completion
+        .choices[0]
+        .finish_reason
+    )
 
+    print(
+        "OpenAI finish reason:",
+        finish_reason,
+    )
+
+    if completion.usage:
+        print(
+            "Prompt tokens:",
+            completion.usage.prompt_tokens,
+        )
+
+        print(
+            "Completion tokens:",
+            completion.usage.completion_tokens,
+        )
+
+    if finish_reason == "length":
+        raise ValueError(
+            "The proposal reached the configured "
+            "max_completion_tokens limit. Increase the "
+            "limit or generate the proposal in sections."
+        )
     content = completion.choices[0].message.content
 
     if not content:
@@ -684,7 +932,7 @@ def normalize_match_text(value: Any) -> str:
 def split_evidence_spans(
     content: Any,
     min_words: int = 5,
-    max_words: int = 35,
+    max_words: int = 60,
 ) -> list[str]:
     """
     Divide proposal chunk content into exact reusable evidence spans.
@@ -715,43 +963,86 @@ def split_evidence_spans(
 
         if len(words) <= max_words:
             spans.append(candidate)
-            continue
 
-        # Long sentences are divided into consecutive exact passages.
-        for start in range(0, len(words), max_words):
-            window = words[start:start + max_words]
+        # Skip sentences that are too long rather than cutting
+        # them into incomplete evidence fragments.
+        continue
+        # if len(words) <= max_words:
+        #     spans.append(candidate)
+        #     continue
 
-            if len(window) >= min_words:
-                spans.append(" ".join(window))
+        # # Long sentences are divided into consecutive exact passages.
+        # for start in range(0, len(words), max_words):
+        #     window = words[start:start + max_words]
+
+        #     if len(window) >= min_words:
+        #         spans.append(" ".join(window))
 
     return spans
 
-
 def build_evidence_catalog(
-    proposal_chunks: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
+    proposal_chunks: list[
+        dict[str, Any]
+    ],
+) -> dict[
+    str,
+    dict[str, Any],
+]:
     """
     Create controlled evidence IDs from proposal_db chunks.
+
+    Invalid RFP and client-background passages are removed
+    before applying the six-evidence-items-per-chunk limit.
     """
-    catalog: dict[str, dict[str, Any]] = {}
+
+    catalog: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
     seen = set()
-    # counter = 1
 
     for chunk in proposal_chunks:
-        if chunk.get("database_target") != "proposal_db":
+        if (
+            chunk.get(
+                "database_target"
+            )
+            != "proposal_db"
+        ):
             continue
 
-        chunk_id = str(chunk.get("chunk_id", "")).strip()
+        chunk_id = str(
+            chunk.get(
+                "chunk_id",
+                "",
+            )
+        ).strip()
 
         if not chunk_id:
             continue
 
+        accepted_span_count = 0
+
         spans = split_evidence_spans(
-            chunk.get("content", "")
-        )[:6]
+            chunk.get(
+                "content",
+                "",
+            )
+        )
 
         for span in spans:
-            normalized_span = normalize_match_text(span)
+            # Filter first.
+            if is_invalid_company_evidence(
+                span
+            ):
+                continue
+
+            normalized_span = (
+                normalize_match_text(
+                    span
+                )
+            )
+
             deduplication_key = (
                 chunk_id,
                 normalized_span,
@@ -760,51 +1051,262 @@ def build_evidence_catalog(
             if deduplication_key in seen:
                 continue
 
-            seen.add(deduplication_key)
-
-            evidence_key = (
-                f"{chunk_id}|{normalized_span}"
+            seen.add(
+                deduplication_key
             )
 
-            evidence_hash = hashlib.sha256(
-                evidence_key.encode("utf-8")
-            ).hexdigest()[:12].upper()
+            evidence_key = (
+                f"{chunk_id}|"
+                f"{normalized_span}"
+            )
 
-            evidence_id = f"EV-{evidence_hash}"
+            evidence_hash = (
+                hashlib.sha256(
+                    evidence_key.encode(
+                        "utf-8"
+                    )
+                )
+                .hexdigest()[:12]
+                .upper()
+            )
+
+            evidence_id = (
+                f"EV-{evidence_hash}"
+            )
 
             page_number = (
-                chunk.get("page_numbers")
-                or chunk.get("page_number_start")
+                chunk.get(
+                    "page_numbers"
+                )
+                or chunk.get(
+                    "page_number_start"
+                )
                 or ""
             )
 
             catalog[evidence_id] = {
-                "evidence_id": evidence_id,
+                "evidence_id": (
+                    evidence_id
+                ),
                 "quote": span,
                 "chunk_id": chunk_id,
                 "source_file": str(
-                    chunk.get("source_file", "")
+                    chunk.get(
+                        "source_file",
+                        "",
+                    )
                 ),
-                "page_number": str(page_number),
+                "page_number": str(
+                    page_number
+                ),
                 "project_name": str(
-                    chunk.get("project_name", "")
+                    chunk.get(
+                        "project_name",
+                        "",
+                    )
                 ),
             }
 
-            # counter += 1
+            accepted_span_count += 1
+
+            # Limit after filtering.
+            if accepted_span_count >= 6:
+                break
 
     return catalog
+# def build_evidence_catalog(
+#     proposal_chunks: list[dict[str, Any]],
+# ) -> dict[str, dict[str, Any]]:
+#     """
+#     Create controlled evidence IDs from proposal_db chunks.
+#     """
+#     catalog: dict[str, dict[str, Any]] = {}
+#     seen = set()
+#     # counter = 1
 
+#     for chunk in proposal_chunks:
+#         if chunk.get("database_target") != "proposal_db":
+#             continue
 
+#         chunk_id = str(chunk.get("chunk_id", "")).strip()
+
+#         if not chunk_id:
+#             continue
+
+#         spans = split_evidence_spans(
+#             chunk.get("content", "")
+#         )[:6]
+
+#         for span in spans:
+#             if is_invalid_company_evidence(
+#                 span
+#             ):
+#                 continue
+#             normalized_span = normalize_match_text(span)
+#             deduplication_key = (
+#                 chunk_id,
+#                 normalized_span,
+#             )
+
+#             if deduplication_key in seen:
+#                 continue
+
+#             seen.add(deduplication_key)
+
+#             evidence_key = (
+#                 f"{chunk_id}|{normalized_span}"
+#             )
+
+#             evidence_hash = hashlib.sha256(
+#                 evidence_key.encode("utf-8")
+#             ).hexdigest()[:12].upper()
+
+#             evidence_id = f"EV-{evidence_hash}"
+
+#             page_number = (
+#                 chunk.get("page_numbers")
+#                 or chunk.get("page_number_start")
+#                 or ""
+#             )
+
+#             catalog[evidence_id] = {
+#                 "evidence_id": evidence_id,
+#                 "quote": span,
+#                 "chunk_id": chunk_id,
+#                 "source_file": str(
+#                     chunk.get("source_file", "")
+#                 ),
+#                 "page_number": str(page_number),
+#                 "project_name": str(
+#                     chunk.get("project_name", "")
+#                 ),
+#             }
+
+#             # counter += 1
+
+#     return catalog
+
+def is_invalid_company_evidence(
+    quote: str,
+) -> bool:
+    """
+    Reject passages that are not concrete company evidence.
+
+    This includes:
+    - RFP instructions
+    - submission requirements
+    - current-client background
+    - future proposal commitments
+    - generic marketing language
+    - headings and document structure
+    """
+
+    text = normalize_match_text(
+        quote
+    )
+
+    if not text:
+        return True
+
+    invalid_patterns = [
+        r"\bproponents?\s+"
+        r"(must|shall|will|are required to)\b",
+
+        r"\brespondents?\s+"
+        r"(must|shall|will|are required to)\b",
+
+        r"\bvendors?\s+"
+        r"(must|shall|will|are required to)\b",
+
+        r"\bmust provide\b",
+        r"\bmust submit\b",
+        r"\bshall provide\b",
+        r"\bshall submit\b",
+        r"\bare required to\b",
+
+        r"\bwith (its|their) proposal\b",
+        r"\bcompleted hecvat\b",
+        r"\bhecvat\b",
+        r"\bsaas form\b",
+        r"\bsoftware as a service form\b",
+        r"\bappendix [a-z]\b",
+
+        r"\bthe organization will\b",
+        r"\bwe will\b",
+        r"\bwill provide\b",
+        r"\bwill deliver\b",
+        r"\bwill include\b",
+        r"\bwill submit\b",
+        r"\bwill ensure\b",
+
+        r"\ba table of contents\b",
+        r"\btable of contents of all presented material\b",
+
+        r"^(his|her|their|its|this|these|it)\b",
+
+        r"\balign with usask\b",
+        r"\busask['’]s (technical|operational|requirements|needs)\b",
+        r"\bdirectly supporting usask\b",
+
+        r"\bas outlined in (this|the) proposal\b",
+        r"\bour organization maintains a strong commitment\b",
+    ]
+
+    return any(
+        re.search(
+            pattern,
+            text,
+        )
+        for pattern in invalid_patterns
+    )
 def build_evidence_context(
-    evidence_catalog: dict[str, dict[str, Any]],
+    evidence_catalog: dict[
+        str,
+        dict[str, Any],
+    ],
 ) -> str:
     """
-    Format controlled evidence options for the model.
+    Validate approved evidence again before sending
+    it to the proposal-generation model.
     """
+
+    invalid_items = []
+
+    for evidence_id, evidence in (
+        evidence_catalog.items()
+    ):
+        quote = str(
+            evidence.get(
+                "quote",
+                "",
+            )
+        ).strip()
+
+        if is_invalid_company_evidence(
+            quote
+        ):
+            invalid_items.append(
+                f"{evidence_id}: {quote}"
+            )
+
+    if invalid_items:
+        raise ValueError(
+            "Approved evidence contains RFP "
+            "instructions, client background, "
+            "future commitments, or unsupported "
+            "marketing language.\n"
+            "Return to Review Evidence, retrieve "
+            "the candidates again, and remove:\n- "
+            + "\n- ".join(
+                invalid_items
+            )
+        )
+
     blocks = []
 
-    for evidence_id, evidence in evidence_catalog.items():
+    for evidence_id, evidence in (
+        evidence_catalog.items()
+    ):
         blocks.append(
             f"""
 [EVIDENCE {evidence_id}]
@@ -838,7 +1340,10 @@ exact_quote: {evidence["quote"]}
 ####
 def enrich_and_validate_citations(
     proposal: dict[str, Any],
-    evidence_catalog: dict[str, dict[str, Any]],
+    evidence_catalog: dict[
+        str,
+        dict[str, Any],
+    ],
 ) -> dict[str, Any]:
     errors = []
 
@@ -847,10 +1352,15 @@ def enrich_and_validate_citations(
         start=1,
     ):
         evidence_id = str(
-            citation.get("evidence_id", "")
+            citation.get(
+                "evidence_id",
+                "",
+            )
         ).strip()
 
-        evidence = evidence_catalog.get(evidence_id)
+        evidence = evidence_catalog.get(
+            evidence_id
+        )
 
         if evidence is None:
             errors.append(
@@ -860,7 +1370,10 @@ def enrich_and_validate_citations(
             continue
 
         claim = str(
-            citation.get("claim", "")
+            citation.get(
+                "claim",
+                "",
+            )
         ).strip()
 
         if not claim:
@@ -868,7 +1381,7 @@ def enrich_and_validate_citations(
                 f"Citation {index} has an empty claim."
             )
 
-        # All citation evidence and metadata come from Python.
+        citation["claim"] = evidence["quote"]
         citation["evidence_quote"] = evidence["quote"]
         citation["chunk_id"] = evidence["chunk_id"]
         citation["source_file"] = evidence["source_file"]
@@ -882,6 +1395,56 @@ def enrich_and_validate_citations(
         )
 
     return proposal
+# def enrich_and_validate_citations(
+#     proposal: dict[str, Any],
+#     evidence_catalog: dict[str, dict[str, Any]],
+# ) -> dict[str, Any]:
+#     errors = []
+
+#     for index, citation in enumerate(
+#         proposal.get("citations", []),
+#         start=1,
+#     ):
+#         evidence_id = str(
+#             citation.get("evidence_id", "")
+#         ).strip()
+
+#         evidence = evidence_catalog.get(evidence_id)
+
+#         if evidence is None:
+#             errors.append(
+#                 f"Citation {index} uses an unknown "
+#                 f"evidence_id: {evidence_id}"
+#             )
+#             continue
+
+#     claim = str(
+#         citation.get("claim", "")
+#     ).strip()
+
+#     if not claim:
+#         errors.append(
+#             f"Citation {index} has an empty claim."
+#         )
+
+#     # Do not trust the model-written citation claim.
+#     # The approved exact evidence becomes the final claim.
+#     citation["claim"] = evidence["quote"]
+
+#     # All citation evidence and metadata come from Python.
+#     citation["evidence_quote"] = evidence["quote"]
+#     citation["chunk_id"] = evidence["chunk_id"]
+#     citation["source_file"] = evidence["source_file"]
+#     citation["page_number"] = evidence["page_number"]
+#     citation["project_name"] = evidence["project_name"]
+
+#     if errors:
+#         raise ValueError(
+#             "Invalid proposal citations:\n- "
+#             + "\n- ".join(errors)
+#         )
+
+#     return proposal
 #########################
 def validate_citation_claim_types(
     proposal: dict[str, Any],
@@ -969,7 +1532,70 @@ def validate_overbroad_company_claims(
                 )
 
     return errors
+def validate_sensitive_company_claims(
+    proposal: dict[str, Any],
+) -> list[str]:
+    errors = []
+
+    fields = [
+        "executive_summary",
+        "relevant_experience",
+        "risk_management",
+    ]
+
+    texts = [
+        str(
+            proposal.get(
+                field,
+                "",
+            )
+        )
+        for field in fields
+    ]
+
+    texts.extend(
+        str(
+            row.get(
+                "response",
+                "",
+            )
+        )
+        for row in proposal.get(
+            "compliance_matrix",
+            [],
+        )
+    )
+
+    unsupported_patterns = [
+        r"\bthere are no judgments\b",
+        r"\bno pending litigation\b",
+        r"\bno expected legal actions\b",
+        r"\bwe hereby warrant\b",
+        r"\bfully certified\b",
+        r"\bfully compliant\b",
+    ]
+
+    for text in texts:
+        normalized = (
+            normalize_match_text(
+                text
+            )
+        )
+
+        for pattern in unsupported_patterns:
+            if re.search(
+                pattern,
+                normalized,
+            ):
+                errors.append(
+                    "Proposal contains an unsupported "
+                    f"sensitive company assertion: {text}"
+                )
+                break
+
+    return errors
 ##
+###
 def validate_citations(
     proposal: dict[str, Any],
     proposal_chunks: list[dict[str, Any]],
@@ -1215,6 +1841,23 @@ def main():
         proposal_context.get("selected_requirements")
         or extracted.get("requirements", [])
     )
+    valid_requirement_ids = [
+        str(
+            requirement.get(
+                "requirement_id",
+                "",
+            )
+        ).strip()
+        for requirement in requirements
+        if requirement.get(
+            "requirement_id"
+        )
+    ]
+
+    if not valid_requirement_ids:
+        raise ValueError(
+            "No valid requirement IDs were found."
+        )
 
     proposal_chunks = proposal_context.get(
         "chunks",
@@ -1280,7 +1923,8 @@ def main():
 #####
     requirements_context = build_requirements_context(
         requirements=requirements,
-        max_items=args.max_requirements,
+        # max_items=args.max_requirements,
+        max_items=len(requirements),
     )
 
     # proposal_knowledge_context = build_proposal_knowledge_context(
@@ -1314,6 +1958,9 @@ def main():
         model=args.model,
         valid_chunk_ids=valid_chunk_ids,
         valid_evidence_ids=valid_evidence_ids,
+        valid_requirement_ids=(
+            valid_requirement_ids
+        ),        
     )
     ## add to save validation failuer
     ## validation failure
@@ -1340,7 +1987,19 @@ def main():
             "Invalid citation claim types:\n- "
             + "\n- ".join(citation_type_errors)
         )
+    sensitive_claim_errors = (
+        validate_sensitive_company_claims(
+            proposal
+        )
+    )
 
+    if sensitive_claim_errors:
+        raise ValueError(
+            "Unsupported sensitive company claims:\n- "
+            + "\n- ".join(
+                sensitive_claim_errors
+            )
+        )
     claim_errors = validate_overbroad_company_claims(
         proposal
     )

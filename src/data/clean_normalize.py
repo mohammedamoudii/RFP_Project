@@ -1,31 +1,97 @@
+from __future__ import annotations
+
 from pathlib import Path
+import argparse
+import hashlib
 import json
 import re
-import hashlib
+from typing import Any
+
 import pandas as pd
-from tqdm import tqdm
 
 
 INPUT_JSONL = Path("data/processed/parsed_elements.jsonl")
 OUTPUT_JSONL = Path("data/processed/cleaned_documents.jsonl")
 REPORT_CSV = Path("data/processed/cleaning_report.csv")
 
+REPORT_COLUMNS = [
+    "element_id",
+    "opportunity_id",
+    "project_id",
+    "database_target",
+    "collection_name",
+    "source_file",
+    "file_type",
+    "element_type",
+    "original_length",
+    "cleaned_length",
+    "word_count",
+    "kept",
+]
 
-def read_jsonl(path: Path):
-    rows = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+
+    rows: list[dict[str, Any]] = []
+
+    with path.open("r", encoding="utf-8") as file:
+        for line in file:
             line = line.strip()
             if line:
                 rows.append(json.loads(line))
+
     return rows
 
 
-def write_jsonl(rows, path: Path):
+def write_jsonl(rows: list[dict[str, Any]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    temporary_path = path.with_suffix(path.suffix + ".part")
+
+    try:
+        with temporary_path.open("w", encoding="utf-8") as file:
+            for row in rows:
+                file.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+        temporary_path.replace(path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink(missing_ok=True)
+
+
+def read_csv_records(path: Path) -> list[dict[str, Any]]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+
+    try:
+        dataframe = pd.read_csv(
+            path,
+            dtype=str,
+            keep_default_na=False,
+        )
+    except pd.errors.EmptyDataError:
+        return []
+
+    return dataframe.to_dict(orient="records")
+
+
+def write_report_csv(rows: list[dict[str, Any]], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    dataframe = pd.DataFrame(rows, columns=REPORT_COLUMNS)
+    temporary_path = path.with_suffix(path.suffix + ".part")
+
+    try:
+        dataframe.to_csv(
+            temporary_path,
+            index=False,
+            encoding="utf-8-sig",
+        )
+        temporary_path.replace(path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink(missing_ok=True)
 
 
 def content_hash(text: str) -> str:
@@ -33,8 +99,7 @@ def content_hash(text: str) -> str:
 
 
 def normalize_bullets(text: str) -> str:
-    bullet_chars = ["•", "●", "○", "▪", "▫", "–", "—"]
-    for bullet in bullet_chars:
+    for bullet in ["•", "●", "○", "▪", "▫", "–", "—"]:
         text = text.replace(bullet, "-")
     return text
 
@@ -44,14 +109,6 @@ def remove_control_characters(text: str) -> str:
 
 
 def fix_broken_hyphenation(text: str) -> str:
-    """
-    Example:
-    implemen-
-    tation
-
-    becomes:
-    implementation
-    """
     return re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)
 
 
@@ -63,13 +120,8 @@ def normalize_whitespace(text: str) -> str:
 
 
 def remove_page_noise_lines(text: str) -> str:
-    """
-    Conservative cleanup only.
-    Removes very simple standalone page-number lines.
-    Does not remove headings or requirement numbering.
-    """
     lines = text.splitlines()
-    cleaned_lines = []
+    cleaned_lines: list[str] = []
 
     for line in lines:
         stripped = line.strip()
@@ -78,11 +130,14 @@ def remove_page_noise_lines(text: str) -> str:
             cleaned_lines.append("")
             continue
 
-        # Remove standalone page numbers like: 1, Page 1, Page 1 of 10
         if re.fullmatch(r"\d{1,4}", stripped):
             continue
 
-        if re.fullmatch(r"page\s+\d{1,4}(\s+of\s+\d{1,4})?", stripped, flags=re.IGNORECASE):
+        if re.fullmatch(
+            r"page\s+\d{1,4}(\s+of\s+\d{1,4})?",
+            stripped,
+            flags=re.IGNORECASE,
+        ):
             continue
 
         cleaned_lines.append(stripped)
@@ -90,19 +145,17 @@ def remove_page_noise_lines(text: str) -> str:
     return "\n".join(cleaned_lines).strip()
 
 
-def clean_text(text: str) -> str:
+def clean_text(text: Any) -> str:
     if text is None:
         return ""
 
-    text = str(text)
-
-    text = remove_control_characters(text)
-    text = fix_broken_hyphenation(text)
-    text = normalize_bullets(text)
-    text = remove_page_noise_lines(text)
-    text = normalize_whitespace(text)
-
-    return text
+    cleaned = str(text)
+    cleaned = remove_control_characters(cleaned)
+    cleaned = fix_broken_hyphenation(cleaned)
+    cleaned = normalize_bullets(cleaned)
+    cleaned = remove_page_noise_lines(cleaned)
+    cleaned = normalize_whitespace(cleaned)
+    return cleaned
 
 
 def count_words(text: str) -> int:
@@ -111,30 +164,30 @@ def count_words(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text))
 
 
-def main():
-    if not INPUT_JSONL.exists():
-        raise FileNotFoundError(
-            f"Parsed file not found: {INPUT_JSONL}. Run parse_documents.py first."
-        )
+def clean_parsed_elements(
+    parsed_elements: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    cleaned_rows: list[dict[str, Any]] = []
+    report_rows: list[dict[str, Any]] = []
 
-    rows = read_jsonl(INPUT_JSONL)
-
-    cleaned_rows = []
-    report_rows = []
-
-    for row in tqdm(rows, desc="Cleaning parsed elements"):
+    for row in parsed_elements:
         original_content = row.get("content", "")
         cleaned_content = clean_text(original_content)
 
-        original_length = len(str(original_content)) if original_content is not None else 0
+        original_length = (
+            len(str(original_content))
+            if original_content is not None
+            else 0
+        )
         cleaned_length = len(cleaned_content)
         word_count = count_words(cleaned_content)
-
         keep = cleaned_length > 0 and word_count > 0
 
         report_rows.append(
             {
                 "element_id": row.get("element_id"),
+                "opportunity_id": row.get("opportunity_id"),
+                "project_id": row.get("project_id"),
                 "database_target": row.get("database_target"),
                 "collection_name": row.get("collection_name"),
                 "source_file": row.get("source_file"),
@@ -155,35 +208,171 @@ def main():
         cleaned_row["content_hash"] = content_hash(cleaned_content)
         cleaned_row["char_count"] = cleaned_length
         cleaned_row["word_count"] = word_count
-
         cleaned_rows.append(cleaned_row)
 
-    write_jsonl(cleaned_rows, OUTPUT_JSONL)
-    pd.DataFrame(report_rows).to_csv(REPORT_CSV, index=False, encoding="utf-8-sig")
+    return cleaned_rows, report_rows
 
-    print(f"Cleaned documents saved to: {OUTPUT_JSONL}")
-    print(f"Cleaning report saved to: {REPORT_CSV}")
-    print(f"Input elements: {len(rows)}")
-    print(f"Output cleaned elements: {len(cleaned_rows)}")
-    print(f"Removed empty/no-word elements: {len(rows) - len(cleaned_rows)}")
 
-    if cleaned_rows:
-        df = pd.DataFrame(cleaned_rows)
+def belongs_to_scope(
+    row: dict[str, Any],
+    opportunity_id: str,
+    database_target: str,
+) -> bool:
+    return (
+        str(row.get("opportunity_id", "") or "").strip()
+        == opportunity_id
+        and str(row.get("database_target", "") or "").strip()
+        == database_target
+    )
 
-        print("\nDatabase targets:")
-        print(df["database_target"].value_counts(dropna=False))
 
-        print("\nCollections:")
-        print(df["collection_name"].value_counts(dropna=False))
+def clean_opportunity_elements(
+    parsed_elements: list[dict[str, Any]],
+    opportunity_id: str,
+    database_target: str = "rfp_db",
+    output_path: Path = OUTPUT_JSONL,
+    report_path: Path = REPORT_CSV,
+    replace_existing: bool = True,
+) -> dict[str, Any]:
+    normalized_id = str(opportunity_id).strip()
 
-        print("\nFile types:")
-        print(df["file_type"].value_counts(dropna=False))
+    if not normalized_id:
+        raise ValueError("Opportunity ID cannot be empty.")
 
-        print("\nElement types:")
-        print(df["element_type"].value_counts(dropna=False))
+    selected_elements = [
+        row
+        for row in parsed_elements
+        if belongs_to_scope(
+            row,
+            opportunity_id=normalized_id,
+            database_target=database_target,
+        )
+    ]
 
-        print("\nWord count summary:")
-        print(df["word_count"].describe())
+    if not selected_elements:
+        raise ValueError(
+            "No parsed elements matched "
+            f"opportunity_id='{normalized_id}' and "
+            f"database_target='{database_target}'."
+        )
+
+    cleaned_rows, report_rows = clean_parsed_elements(selected_elements)
+
+    existing_cleaned = read_jsonl(output_path)
+    existing_report = read_csv_records(report_path)
+
+    if replace_existing:
+        existing_cleaned = [
+            row
+            for row in existing_cleaned
+            if not belongs_to_scope(
+                row,
+                opportunity_id=normalized_id,
+                database_target=database_target,
+            )
+        ]
+        existing_report = [
+            row
+            for row in existing_report
+            if not belongs_to_scope(
+                row,
+                opportunity_id=normalized_id,
+                database_target=database_target,
+            )
+        ]
+
+    merged_cleaned = existing_cleaned + cleaned_rows
+    merged_report = existing_report + report_rows
+
+    write_jsonl(merged_cleaned, output_path)
+    write_report_csv(merged_report, report_path)
+
+    return {
+        "opportunity_id": normalized_id,
+        "database_target": database_target,
+        "input_element_count": len(selected_elements),
+        "cleaned_element_count": len(cleaned_rows),
+        "removed_element_count": len(selected_elements) - len(cleaned_rows),
+        "elements": cleaned_rows,
+        "report_rows": report_rows,
+        "output_path": str(output_path),
+        "report_path": str(report_path),
+    }
+
+
+def clean_all_documents(
+    input_path: Path = INPUT_JSONL,
+    output_path: Path = OUTPUT_JSONL,
+    report_path: Path = REPORT_CSV,
+) -> dict[str, Any]:
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Parsed file not found: {input_path}. "
+            "Run parse_documents.py first."
+        )
+
+    rows = read_jsonl(input_path)
+    cleaned_rows, report_rows = clean_parsed_elements(rows)
+
+    write_jsonl(cleaned_rows, output_path)
+    write_report_csv(report_rows, report_path)
+
+    return {
+        "input_element_count": len(rows),
+        "cleaned_element_count": len(cleaned_rows),
+        "removed_element_count": len(rows) - len(cleaned_rows),
+        "elements": cleaned_rows,
+        "report_rows": report_rows,
+        "output_path": str(output_path),
+        "report_path": str(report_path),
+    }
+
+
+def print_summary(result: dict[str, Any]) -> None:
+    print("Cleaned documents saved to:", result["output_path"])
+    print("Cleaning report saved to:", result["report_path"])
+    print("Input elements:", result["input_element_count"])
+    print("Output cleaned elements:", result["cleaned_element_count"])
+    print("Removed empty/no-word elements:", result["removed_element_count"])
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", default=str(INPUT_JSONL))
+    parser.add_argument("--output", default=str(OUTPUT_JSONL))
+    parser.add_argument("--report", default=str(REPORT_CSV))
+    parser.add_argument("--opportunity-id", default="")
+    parser.add_argument("--database-target", default="rfp_db")
+    args = parser.parse_args()
+
+    input_path = Path(args.input)
+    output_path = Path(args.output)
+    report_path = Path(args.report)
+
+    if args.opportunity_id:
+        if not input_path.exists():
+            raise FileNotFoundError(
+                f"Parsed file not found: {input_path}. "
+                "Run parse_documents.py first."
+            )
+
+        parsed_elements = read_jsonl(input_path)
+        result = clean_opportunity_elements(
+            parsed_elements=parsed_elements,
+            opportunity_id=args.opportunity_id,
+            database_target=args.database_target,
+            output_path=output_path,
+            report_path=report_path,
+            replace_existing=True,
+        )
+    else:
+        result = clean_all_documents(
+            input_path=input_path,
+            output_path=output_path,
+            report_path=report_path,
+        )
+
+    print_summary(result)
 
 
 if __name__ == "__main__":
