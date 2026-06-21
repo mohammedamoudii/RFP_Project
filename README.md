@@ -426,30 +426,13 @@ Get-Content data/evaluation/retrieval_summary_latest.json
 Latest confirmed retrieval evaluation result:
 
 ```text
-Top-k: 5
-Tests: 5
 
-Overall:
-Mean Precision@K: 0.24
-Mean Recall@K: 0.80
-Hit Rate@K: 0.80
-Mean Reciprocal Rank: 0.80
-Top-1 Chunk Accuracy: 0.80
-Source Accuracy@K: 0.80
-Page Accuracy@K: 1.00
-Source + Page Accuracy@K: 1.00
 ```
 
 RFP retrieval performed strongly:
 
 ```text
-RFP tests: 3
-Recall@K: 1.0
-Hit Rate@K: 1.0
-MRR: 1.0
-Top-1 Accuracy: 1.0
-Source Accuracy@K: 1.0
-Page Accuracy@K: 1.0
+
 ```
 
 Proposal retrieval used only 2 tests, so the result is a small validation sample, not a full benchmark.
