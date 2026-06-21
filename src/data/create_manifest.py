@@ -1,3 +1,20 @@
+"""Build and maintain the project file manifest.
+
+This module scans files stored under ``data/raw`` and creates the manifest used by
+later pipeline stages such as parsing, cleaning, chunking, and ChromaDB insertion.
+
+The folder directly below ``data/raw`` determines which knowledge base receives a
+file:
+
+- ``data/raw/rfp_uploads/...`` -> ``rfp_db / rfp_documents``
+- ``data/raw/proposal_knowledge/...`` -> ``proposal_db / proposal_knowledge``
+
+Two execution modes are supported:
+
+1. Full rebuild mode scans the complete ``data/raw`` tree.
+2. Opportunity mode scans one newly uploaded RFP folder and merges its rows into
+   the existing manifest without deleting other opportunities or proposal data.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,11 +25,13 @@ import hashlib
 
 import pandas as pd
 
-
+# -----------------------------------------------------------------------------
+# Project paths and supported file types
+# -----------------------------------------------------------------------------
 RAW_ROOT = Path("data/raw")
 OUTPUT_PATH = Path("data/processed/file_manifest.csv")
 SKIPPED_PATH = Path("data/processed/skipped_unknown_files.csv")
-
+# These are the document types accepted by the current ingestion pipeline.
 SUPPORTED_EXTENSIONS = {
     ".pdf",
     ".docx",
@@ -21,7 +40,8 @@ SUPPORTED_EXTENSIONS = {
     ".txt",
     ".xlsx",
 }
-
+# Keeping a fixed column order makes downstream CSV reads predictable even when
+# a run produces no rows or when older manifest files are missing newer fields.
 MANIFEST_COLUMNS = [
     "file_id",
     "database_target",
@@ -48,12 +68,20 @@ SKIPPED_COLUMNS = [
     "reason",
 ]
 
-
+# -----------------------------------------------------------------------------
+# Identifier and routing helpers
+# -----------------------------------------------------------------------------
 def make_id(value: str) -> str:
+    """Return a short deterministic ID for a path-like string.
+
+    A deterministic ID is useful because the same relative path receives the
+    same ``file_id`` when the manifest is rebuilt.
+    """
     return hashlib.md5(value.encode("utf-8")).hexdigest()[:12]
 
 
 def normalize_id(text: str) -> str:
+    """Convert a folder or user-provided name into a stable internal ID."""
     normalized = (
         str(text)
         .lower()
@@ -64,6 +92,7 @@ def normalize_id(text: str) -> str:
         .replace("\\", "_")
     )
 
+    # Repeated separators can appear after replacing spaces, slashes, or dashes.
     while "__" in normalized:
         normalized = normalized.replace("__", "_")
 
@@ -73,6 +102,11 @@ def normalize_id(text: str) -> str:
 def detect_database_target(
     relative_parts: tuple[str, ...],
 ) -> tuple[str, str]:
+    """Map the first raw-data folder to its ChromaDB and collection.
+
+    The explicit mapping prevents current client RFP documents from being
+    treated as proof of company experience.
+    """
     if not relative_parts:
         return "unknown", "unknown"
 
@@ -90,22 +124,29 @@ def detect_database_target(
 def get_project_or_opportunity_name(
     relative_parts: tuple[str, ...],
 ) -> str:
-    """
-    Expected:
-    data/raw/rfp_uploads/<opportunity_folder>/...
-    data/raw/proposal_knowledge/<project_folder>/...
+    """Read the opportunity or project name from the expected layout.
+
+    Expected layouts:
+
+    - ``data/raw/rfp_uploads/<opportunity_folder>/...``
+    - ``data/raw/proposal_knowledge/<project_folder>/...``
     """
     if len(relative_parts) >= 2:
         return relative_parts[1]
 
     return "unknown"
 
+# -----------------------------------------------------------------------------
+# DataFrame and CSV helpers
+# -----------------------------------------------------------------------------
 
 def _empty_manifest_df() -> pd.DataFrame:
+    """Return an empty manifest DataFrame with the canonical columns."""
     return pd.DataFrame(columns=MANIFEST_COLUMNS)
 
 
 def _empty_skipped_df() -> pd.DataFrame:
+    """Return an empty skipped-files DataFrame with canonical columns."""
     return pd.DataFrame(columns=SKIPPED_COLUMNS)
 
 
@@ -113,6 +154,7 @@ def _read_csv_or_empty(
     path: Path,
     columns: list[str],
 ) -> pd.DataFrame:
+    """Read a CSV file and normalize it to the requested column order."""
     if not path.exists() or path.stat().st_size == 0:
         return pd.DataFrame(columns=columns)
 
@@ -142,6 +184,7 @@ def _build_manifest_row(
     project_id: str | None,
     project_name: str | None,
 ) -> dict[str, Any]:
+    """Build one manifest row from a supported source document."""
     relative_path = file_path.relative_to(raw_root)
     relative_path_str = relative_path.as_posix()
     stat = file_path.stat()
@@ -173,6 +216,7 @@ def _save_manifest_rows(
     opportunity_id: str | None = None,
     merge_existing: bool = False,
 ) -> pd.DataFrame:
+    """Save manifest rows, optionally merging one opportunity into the CSV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     new_df = pd.DataFrame(rows, columns=MANIFEST_COLUMNS)
@@ -216,6 +260,7 @@ def _save_skipped_rows(
     opportunity_id: str | None = None,
     merge_existing: bool = False,
 ) -> pd.DataFrame:
+    """Save skipped-file rows, optionally replacing one opportunity's rows."""
     skipped_path.parent.mkdir(parents=True, exist_ok=True)
 
     new_df = pd.DataFrame(rows, columns=SKIPPED_COLUMNS)
@@ -484,6 +529,7 @@ def print_full_manifest_summary(
     manifest_df: pd.DataFrame,
     skipped_df: pd.DataFrame,
 ) -> None:
+    """Print a human-readable summary for a full manifest rebuild."""
     print(f"Created manifest: {OUTPUT_PATH}")
     print(f"Files included: {len(manifest_df)}")
     print(
@@ -531,6 +577,7 @@ def print_full_manifest_summary(
 
 
 def main() -> None:
+    """Run the manifest builder from the command line."""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

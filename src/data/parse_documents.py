@@ -1,3 +1,10 @@
+"""Parse manifest-listed source files into normalized text elements.
+
+This module reads the file manifest produced by ``create_manifest.py`` and
+extracts text from supported document formats. Each parsed element keeps the
+manifest metadata needed by later cleaning, chunking, retrieval, and evidence
+validation stages.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,6 +21,9 @@ from docx import Document
 from pptx import Presentation
 
 
+# -----------------------------------------------------------------------------
+# Project paths and parser configuration
+# -----------------------------------------------------------------------------
 MANIFEST_PATH = Path("data/processed/file_manifest.csv")
 OUTPUT_JSONL = Path("data/processed/parsed_elements.jsonl")
 ERRORS_CSV = Path("data/processed/parsing_errors.csv")
@@ -28,7 +38,11 @@ SUPPORTED_FILE_TYPES = {
 }
 
 
+# -----------------------------------------------------------------------------
+# Text and JSONL helpers
+# -----------------------------------------------------------------------------
 def safe_text(value: Any) -> str:
+    """Convert nullable values from files or DataFrames into clean strings."""
     if value is None:
         return ""
 
@@ -42,6 +56,7 @@ def safe_text(value: Any) -> str:
 
 
 def optional_text(value: Any) -> str | None:
+    """Return cleaned text, using None for empty optional metadata fields."""
     text = safe_text(value)
     return text or None
 
@@ -50,6 +65,7 @@ def write_jsonl(
     rows: Iterable[dict[str, Any]],
     output_path: Path,
 ) -> None:
+    """Write dictionaries as UTF-8 JSONL records."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with output_path.open("w", encoding="utf-8") as file:
@@ -60,6 +76,7 @@ def write_jsonl(
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read a JSONL file into dictionaries, skipping empty lines."""
     if not path.exists():
         return []
 
@@ -86,7 +103,11 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+# -----------------------------------------------------------------------------
+# Metadata and document parsers
+# -----------------------------------------------------------------------------
 def base_metadata(row: dict[str, Any] | pd.Series) -> dict[str, Any]:
+    """Extract shared manifest metadata for every parsed element."""
     return {
         "file_id": safe_text(row.get("file_id")),
         "database_target": safe_text(
@@ -126,6 +147,7 @@ def parse_pdf(
     file_path: Path,
     row: dict[str, Any] | pd.Series,
 ) -> list[dict[str, Any]]:
+    """Extract one text element per readable PDF page."""
     elements: list[dict[str, Any]] = []
     metadata = base_metadata(row)
 
@@ -164,6 +186,7 @@ def parse_docx(
     file_path: Path,
     row: dict[str, Any] | pd.Series,
 ) -> list[dict[str, Any]]:
+    """Extract paragraph and table text from a Word document."""
     elements: list[dict[str, Any]] = []
     metadata = base_metadata(row)
 
@@ -237,6 +260,7 @@ def parse_pptx(
     file_path: Path,
     row: dict[str, Any] | pd.Series,
 ) -> list[dict[str, Any]]:
+    """Extract text and table content from each PowerPoint slide."""
     elements: list[dict[str, Any]] = []
     metadata = base_metadata(row)
 
@@ -302,6 +326,7 @@ def parse_text_file(
     file_path: Path,
     row: dict[str, Any] | pd.Series,
 ) -> list[dict[str, Any]]:
+    """Read a Markdown or plain-text file as one parsed element."""
     metadata = base_metadata(row)
 
     text = file_path.read_text(
@@ -329,6 +354,7 @@ def parse_text_file(
 
 
 def dataframe_to_text(dataframe: pd.DataFrame) -> str:
+    """Convert a spreadsheet slice into line-based pipe-delimited text."""
     dataframe = (
         dataframe
         .dropna(how="all")
@@ -358,6 +384,7 @@ def parse_xlsx(
     row: dict[str, Any] | pd.Series,
     rows_per_element: int = 40,
 ) -> list[dict[str, Any]]:
+    """Extract spreadsheet sheets into row-window text elements."""
     elements: list[dict[str, Any]] = []
     metadata = base_metadata(row)
 
@@ -422,6 +449,7 @@ def parse_xlsx(
 def parse_file(
     row: dict[str, Any] | pd.Series,
 ) -> list[dict[str, Any]]:
+    """Dispatch one manifest row to the parser for its file type."""
     file_type = safe_text(
         row.get("file_type")
     ).lower()
@@ -458,12 +486,16 @@ def parse_file(
     return []
 
 
+# -----------------------------------------------------------------------------
+# Error recording and scoped replacement helpers
+# -----------------------------------------------------------------------------
 def build_error_record(
     row: dict[str, Any] | pd.Series,
     error_message: str,
     traceback_text: str = "",
     error_type: str = "parse_error",
 ) -> dict[str, Any]:
+    """Build a consistent parsing error record for CSV output."""
     return {
         "file_id": safe_text(row.get("file_id")),
         "opportunity_id": optional_text(
@@ -493,6 +525,7 @@ def build_error_record(
 def _normalize_manifest_rows(
     manifest_rows: Iterable[dict[str, Any] | pd.Series],
 ) -> list[dict[str, Any]]:
+    """Convert mixed manifest row objects into plain dictionaries."""
     normalized: list[dict[str, Any]] = []
 
     for row in manifest_rows:
@@ -510,6 +543,7 @@ def _replace_opportunity_records(
     opportunity_id: str,
     database_target: str,
 ) -> list[dict[str, Any]]:
+    """Replace records for one opportunity while preserving all other rows."""
     target_id = safe_text(opportunity_id)
     target_database = safe_text(database_target)
 
@@ -534,6 +568,7 @@ def _save_errors(
     database_target: str | None = None,
     replace_existing: bool = False,
 ) -> None:
+    """Persist parsing errors, optionally replacing one opportunity's errors."""
     errors_path.parent.mkdir(parents=True, exist_ok=True)
 
     existing_errors: list[dict[str, Any]] = []
@@ -643,6 +678,8 @@ def parse_opportunity_documents(
     new_elements: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
 
+    # Streamlit uses the same parser without progress output, while CLI runs can
+    # show tqdm progress for longer batches.
     iterator: Iterable[dict[str, Any]] = selected_rows
 
     if show_progress:
@@ -737,7 +774,7 @@ def parse_all_manifest_documents(
     output_path: Path = OUTPUT_JSONL,
     errors_path: Path = ERRORS_CSV,
 ) -> dict[str, Any]:
-    """Preserve the original full-batch parser behavior."""
+    """Parse every manifest row and rebuild the complete parsed-elements file."""
     if not manifest_path.exists():
         raise FileNotFoundError(
             f"Manifest not found: {manifest_path}. "
@@ -814,6 +851,7 @@ def parse_all_manifest_documents(
 
 
 def print_result_summary(result: dict[str, Any]) -> None:
+    """Print parser output counts and element-type summaries."""
     print(
         "Parsed elements saved to:",
         result["output_path"],
@@ -859,6 +897,7 @@ def print_result_summary(result: dict[str, Any]) -> None:
 
 
 def main() -> None:
+    """Run the parser from the command line."""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

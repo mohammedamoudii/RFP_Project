@@ -1,3 +1,5 @@
+"""Helpers for validating and storing RFP files uploaded through Streamlit."""
+
 from __future__ import annotations
 
 import re
@@ -28,11 +30,14 @@ class UploadedFileLike(Protocol):
     name: str
 
     def getbuffer(self) -> Any:
+        """Return the uploaded file bytes as a buffer-like object."""
         ...
 
 
 @dataclass(frozen=True)
 class SavedUpload:
+    """Metadata returned after an uploaded file is written to disk."""
+
     original_name: str
     saved_name: str
     saved_path: Path
@@ -75,6 +80,8 @@ def normalize_opportunity_id(
 
 
 def safe_text(value: Any) -> str:
+    """Normalize optional input values into stripped strings."""
+
     if value is None:
         return ""
 
@@ -197,6 +204,8 @@ def save_uploaded_files(
                 "opportunity ID."
             )
 
+        # Write to a temporary file first so incomplete uploads do not
+        # replace a previously valid source document.
         temporary_path = target_path.with_suffix(
             target_path.suffix + ".part"
         )

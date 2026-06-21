@@ -1,3 +1,5 @@
+"""Render validated proposal JSON into a human-readable Markdown document."""
+
 from pathlib import Path
 import argparse
 import json
@@ -29,6 +31,8 @@ REQUIRED_FIELDS = [
 def load_json(
     path: Path,
 ) -> dict[str, Any]:
+    """Load a generated proposal JSON file from disk."""
+
     if not path.exists():
         raise FileNotFoundError(
             f"Input file not found: {path}"
@@ -50,6 +54,8 @@ def save_text(
     content: str,
     path: Path,
 ) -> None:
+    """Write rendered Markdown atomically to avoid partial output files."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -74,6 +80,8 @@ def save_text(
             )
 
 def validate_proposal(proposal: dict[str, Any]) -> None:
+    """Ensure generated proposal JSON has every section required to render."""
+
     missing_fields = [
         field for field in REQUIRED_FIELDS
         if field not in proposal
@@ -87,6 +95,8 @@ def validate_proposal(proposal: dict[str, Any]) -> None:
 
 
 def clean_text(value: Any, fallback: str = "Not provided.") -> str:
+    """Return display-safe text for optional proposal fields."""
+
     if value is None:
         return fallback
 
@@ -96,6 +106,8 @@ def clean_text(value: Any, fallback: str = "Not provided.") -> str:
 
 
 def escape_table_cell(value: Any) -> str:
+    """Escape Markdown table separators and collapse cell whitespace."""
+
     text = clean_text(value, fallback="")
 
     text = text.replace("|", "\\|")
@@ -106,6 +118,8 @@ def escape_table_cell(value: Any) -> str:
 
 
 def render_compliance_matrix(rows: list[dict[str, Any]]) -> str:
+    """Render compliance rows as a Markdown table."""
+
     header = (
         "| Requirement ID | Requirement | Response | Evidence |\n"
         "|---|---|---|---|"
@@ -141,6 +155,8 @@ def render_compliance_matrix(rows: list[dict[str, Any]]) -> str:
 
 
 def render_assumptions(assumptions: list[Any]) -> str:
+    """Render proposal assumptions as Markdown bullets."""
+
     if not assumptions:
         return "- No assumptions were stated."
 
@@ -197,6 +213,8 @@ def render_assumptions(assumptions: list[Any]) -> str:
 def render_citations(
     citations: list[dict[str, Any]],
 ) -> str:
+    """Render validated citation records with evidence metadata."""
+
     if not citations:
         return "- No citations were provided."
 
@@ -254,6 +272,8 @@ def render_citations(
     return "\n\n".join(rendered)
 
 def render_markdown(proposal: dict[str, Any]) -> str:
+    """Combine proposal sections, matrix rows, and citations into Markdown."""
+
     title = clean_text(
         proposal.get("title"),
         fallback="Proposal Response",
@@ -333,6 +353,8 @@ def render_markdown(proposal: dict[str, Any]) -> str:
 
 
 def main() -> None:
+    """CLI entry point for rendering a generated proposal JSON file."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

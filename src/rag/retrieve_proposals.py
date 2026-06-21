@@ -1,3 +1,5 @@
+"""Retrieve approved-company proposal knowledge from the proposal Chroma store."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,6 +54,8 @@ TECHNICAL_CATEGORIES = {
 def load_json(
     path: Path,
 ) -> dict[str, Any]:
+    """Load JSON input needed for proposal-knowledge retrieval."""
+
     if not path.exists():
         raise FileNotFoundError(
             f"File not found: {path}"
@@ -68,6 +72,8 @@ def save_json(
     data: dict[str, Any],
     path: Path,
 ) -> None:
+    """Save retrieval context JSON through a temporary file."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -101,6 +107,8 @@ def save_json(
 def create_embedding_function(
     model_name: str = EMBEDDING_MODEL_NAME,
 ) -> SentenceTransformerEmbeddingFunction:
+    """Create the embedding function used for proposal knowledge search."""
+
     return SentenceTransformerEmbeddingFunction(
         model_name=model_name
     )
@@ -109,6 +117,8 @@ def create_embedding_function(
 def get_collection(
     embedding_function=None,
 ):
+    """Open the proposal knowledge Chroma collection."""
+
     if embedding_function is None:
         embedding_function = (
             create_embedding_function()
@@ -143,6 +153,8 @@ def safe_get(
     key: str,
     default: Any = "",
 ) -> Any:
+    """Return metadata values with a fallback for missing entries."""
+
     value = metadata.get(
         key,
         default,
@@ -158,6 +170,8 @@ def preview_text(
     text: str,
     max_chars: int = 450,
 ) -> str:
+    """Create a compact preview for retrieved proposal chunks."""
+
     normalized = " ".join(
         (text or "").split()
     )
@@ -171,6 +185,8 @@ def preview_text(
 def validate_proposal_type(
     proposal_type: str,
 ) -> str:
+    """Normalize and validate the requested proposal type filter."""
+
     normalized = str(
         proposal_type
     ).strip().lower()
@@ -192,6 +208,8 @@ def requirement_matches_proposal_type(
     requirement: dict[str, Any],
     proposal_type: str,
 ) -> bool:
+    """Return whether an extracted requirement belongs in the proposal type."""
+
     proposal_type = validate_proposal_type(
         proposal_type
     )
@@ -242,6 +260,8 @@ def select_requirements(
     proposal_type: str,
     selected_requirement_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
+    """Select requirements that should drive proposal knowledge retrieval."""
+
     proposal_type = validate_proposal_type(
         proposal_type
     )
@@ -305,6 +325,8 @@ def build_query_from_requirement(
     requirement: dict[str, Any],
     proposal_type: str,
 ) -> str:
+    """Build a semantic search query from one extracted requirement."""
+
     proposal_type = validate_proposal_type(
         proposal_type
     )
@@ -372,6 +394,8 @@ Supporting RFP evidence:
 def add_general_queries(
     proposal_type: str,
 ) -> list[dict[str, str]]:
+    """Build broad capability queries for the selected proposal type."""
+
     proposal_type = validate_proposal_type(
         proposal_type
     )
@@ -456,6 +480,8 @@ def build_queries(
     max_requirement_queries: int = 12,
     include_general_queries: bool = True,
 ) -> list[dict[str, str]]:
+    """Build the ordered query set for proposal knowledge retrieval."""
+
     if max_requirement_queries < 0:
         raise ValueError(
             "max_requirement_queries cannot be negative."
@@ -504,6 +530,8 @@ def query_proposal_db(
     top_k: int = 5,
     collection=None,
 ) -> list[dict[str, Any]]:
+    """Run one proposal-knowledge query and convert matches into rows."""
+
     normalized_query = str(
         query
     ).strip()
@@ -712,6 +740,8 @@ def deduplicate_results(
         dict[str, Any]
     ],
 ) -> list[dict[str, Any]]:
+    """Merge duplicate chunks while preserving matched-query context."""
+
     best_by_chunk = {}
     requirement_ids_by_chunk = {}
     query_types_by_chunk = {}
@@ -874,6 +904,8 @@ def retrieve_proposal_context(
     include_general_queries: bool = True,
     output_path: Path | None = None,
 ) -> dict[str, Any]:
+    """Retrieve proposal knowledge chunks for selected RFP requirements."""
+
     proposal_type = validate_proposal_type(
         proposal_type
     )
@@ -1045,6 +1077,8 @@ def print_results(
     rows: list[dict[str, Any]],
     max_preview: int = 10,
 ) -> None:
+    """Print a preview of retrieved proposal knowledge chunks."""
+
     print(
         "\nRetrieved unique proposal chunks:",
         len(rows),
@@ -1143,6 +1177,8 @@ def print_results(
 
 
 def main() -> None:
+    """CLI entry point for proposal-knowledge retrieval."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

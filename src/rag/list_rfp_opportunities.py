@@ -1,3 +1,5 @@
+"""List RFP opportunities stored in the current-client Chroma database."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,6 +26,8 @@ def get_rfp_collection(
     db_path: Path = RFP_DB_PATH,
     collection_name: str = RFP_COLLECTION,
 ):
+    """Open the RFP Chroma collection without loading an embedding model."""
+
     if not db_path.exists():
         raise FileNotFoundError(
             f"RFP Chroma database not found: {db_path}"
@@ -48,6 +52,8 @@ def get_requirements_path(
     opportunity_id: str,
     requirements_dir: Path = REQUIREMENTS_DIR,
 ) -> Path:
+    """Return the expected extracted-requirements path for an opportunity."""
+
     return (
         requirements_dir
         / (
@@ -60,6 +66,8 @@ def get_requirements_path(
 def load_requirement_count(
     requirements_path: Path,
 ) -> int:
+    """Return the number of extracted requirements, or zero if unavailable."""
+
     if not requirements_path.exists():
         return 0
 
@@ -273,6 +281,8 @@ def print_opportunities(
         dict[str, Any]
     ],
 ) -> None:
+    """Print a concise opportunity inventory for CLI use."""
+
     total_chunks = sum(
         int(
             opportunity[
@@ -313,6 +323,8 @@ def print_opportunities(
 
 
 def main() -> None:
+    """CLI entry point for listing indexed RFP opportunities."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

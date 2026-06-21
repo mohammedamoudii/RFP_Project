@@ -1,3 +1,5 @@
+"""Streamlit UI for the full RFP processing, review, and proposal workflow."""
+
 from __future__ import annotations
 
 import json
@@ -85,7 +87,9 @@ from src.rag.retrieve_rfp_context import (
 from src.rendering.render_proposal import (
     render_markdown,
 )
-
+from src.rendering.export_pdf import (
+    export_markdown_to_pdf,
+)
 
 PROCESSED_DIR = Path(
     "data/processed"
@@ -119,6 +123,8 @@ GENERATED_DIR = (
 def load_json(
     path: Path,
 ) -> dict[str, Any]:
+    """Load workflow JSON artifacts produced by the pipeline."""
+
     if not path.exists():
         raise FileNotFoundError(
             f"File not found: {path}"
@@ -135,6 +141,8 @@ def save_json_atomic(
     data: dict[str, Any],
     path: Path,
 ) -> None:
+    """Write JSON artifacts atomically for Streamlit button actions."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -169,6 +177,8 @@ def save_text_atomic(
     content: str,
     path: Path,
 ) -> None:
+    """Write text artifacts atomically for generated Markdown output."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -196,6 +206,8 @@ def save_text_atomic(
 def requirements_path(
     opportunity_id: str,
 ) -> Path:
+    """Return the scoped extracted-requirements artifact path."""
+
     return (
         REQUIREMENTS_DIR
         / (
@@ -209,6 +221,8 @@ def proposal_context_path(
     opportunity_id: str,
     proposal_type: str,
 ) -> Path:
+    """Return the scoped proposal-knowledge retrieval path."""
+
     return (
         PROPOSAL_CONTEXT_DIR
         / (
@@ -223,6 +237,8 @@ def evidence_candidates_path(
     opportunity_id: str,
     proposal_type: str,
 ) -> Path:
+    """Return the evidence-candidate artifact path for review."""
+
     return (
         EVIDENCE_CANDIDATES_DIR
         / (
@@ -237,6 +253,8 @@ def evidence_approval_path(
     opportunity_id: str,
     proposal_type: str,
 ) -> Path:
+    """Return the saved evidence-approval artifact path."""
+
     return (
         EVIDENCE_APPROVAL_DIR
         / (
@@ -251,6 +269,8 @@ def generated_json_path(
     opportunity_id: str,
     proposal_type: str,
 ) -> Path:
+    """Return the validated generated-proposal JSON path."""
+
     return (
         GENERATED_DIR
         / (
@@ -265,6 +285,8 @@ def generated_raw_path(
     opportunity_id: str,
     proposal_type: str,
 ) -> Path:
+    """Return the raw model-output JSON path before validation enrichment."""
+
     return (
         GENERATED_DIR
         / (
@@ -279,6 +301,8 @@ def generated_markdown_path(
     opportunity_id: str,
     proposal_type: str,
 ) -> Path:
+    """Return the generated proposal Markdown path."""
+
     return (
         GENERATED_DIR
         / (
@@ -288,8 +312,24 @@ def generated_markdown_path(
         )
     )
 
+def generated_pdf_path(
+    opportunity_id: str,
+    proposal_type: str,
+) -> Path:
+    """Return the generated proposal PDF path."""
+
+    return (
+        GENERATED_DIR
+        / (
+            f"{opportunity_id}_"
+            f"{proposal_type}_"
+            "proposal.pdf"
+        )
+    )
 
 def initialize_state() -> None:
+    """Initialize Streamlit session keys used across workflow tabs."""
+
     defaults = {
         "selected_opportunity_id": "",
         "selected_requirement_ids": [],
@@ -315,6 +355,8 @@ def requirement_table(
     ],
     selected_ids: list[str],
 ) -> pd.DataFrame:
+    """Build the editable requirement-selection table."""
+
     selected_set = set(
         selected_ids
     )
@@ -390,6 +432,8 @@ def evidence_table(
         dict[str, Any],
     ],
 ) -> pd.DataFrame:
+    """Build the evidence-review table shown in Streamlit."""
+
     rows = []
 
     for evidence_id, item in (
@@ -430,6 +474,8 @@ def validate_compliance_coverage(
         dict[str, Any]
     ],
 ) -> list[str]:
+    """Check that every selected requirement appears once in the matrix."""
+
     expected_ids = {
         str(
             requirement.get(
@@ -490,6 +536,8 @@ def run_upload_pipeline(
     replace_existing: bool,
     retrieval_top_k: int,
 ) -> dict[str, Any]:
+    """Run upload, parsing, chunking, indexing, retrieval, and extraction."""
+
     normalized_id = (
         normalize_opportunity_id(
             opportunity_id
@@ -642,6 +690,8 @@ def generate_grounded_proposal(
     str,
     list[str],
 ]:
+    """Generate, validate, enrich, and render a proposal from approved evidence."""
+
     requirements = (
         proposal_context.get(
             "selected_requirements"
@@ -1411,7 +1461,7 @@ with evidence_tab:
             st.number_input(
                 "Maximum requirement queries",
                 min_value=1,
-                max_value=30,
+                max_value=200,
                 value=12,
                 key="max_requirement_queries",
             )
@@ -1858,8 +1908,8 @@ with generation_tab:
                 markdown
             )
 
-            download_col_1, download_col_2 = (
-                st.columns(2)
+            download_col_1, download_col_2, download_col_3 = (
+                st.columns(3)
             )
 
             with download_col_1:
@@ -1891,3 +1941,34 @@ with generation_tab:
                     ),
                     mime="text/markdown",
                 )
+
+            with download_col_3:
+                try:
+                    pdf_bytes = export_markdown_to_pdf(
+                        markdown_text=markdown,
+                        output_path=generated_pdf_path(
+                            active_id,
+                            proposal_type,
+                        ),
+                    )
+
+                    st.download_button(
+                        "Download Proposal PDF",
+                        data=pdf_bytes,
+                        file_name=(
+                            f"{active_id}_"
+                            f"{proposal_type}_"
+                            "proposal.pdf"
+                        ),
+                        mime="application/pdf",
+                    )
+
+                except Exception as error:
+                    st.error(
+                        "PDF export is not available on this machine."
+                    )
+                    st.caption(
+                        "Markdown download is still available. "
+                        "Install markdown and weasyprint, then restart Streamlit."
+                    )
+                    st.exception(error)

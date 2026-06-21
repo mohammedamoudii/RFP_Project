@@ -1,3 +1,10 @@
+"""Clean parsed document elements before chunking and embedding.
+
+The parser output can contain page numbers, control characters, empty records,
+and inconsistent whitespace. This module normalizes that text while preserving
+the metadata needed to keep RFP content and proposal knowledge separated in the
+downstream ChromaDB collections.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +17,9 @@ from typing import Any
 import pandas as pd
 
 
+# -----------------------------------------------------------------------------
+# Project paths and report schema
+# -----------------------------------------------------------------------------
 INPUT_JSONL = Path("data/processed/parsed_elements.jsonl")
 OUTPUT_JSONL = Path("data/processed/cleaned_documents.jsonl")
 REPORT_CSV = Path("data/processed/cleaning_report.csv")
@@ -30,7 +40,11 @@ REPORT_COLUMNS = [
 ]
 
 
+# -----------------------------------------------------------------------------
+# File IO helpers
+# -----------------------------------------------------------------------------
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read JSONL records from disk, returning an empty list when absent."""
     if not path.exists():
         return []
 
@@ -46,6 +60,7 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def write_jsonl(rows: list[dict[str, Any]], path: Path) -> None:
+    """Write JSONL through a temporary file to avoid partial outputs."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_suffix(path.suffix + ".part")
 
@@ -61,6 +76,7 @@ def write_jsonl(rows: list[dict[str, Any]], path: Path) -> None:
 
 
 def read_csv_records(path: Path) -> list[dict[str, Any]]:
+    """Read a CSV report into records, treating missing or empty files as none."""
     if not path.exists() or path.stat().st_size == 0:
         return []
 
@@ -77,6 +93,7 @@ def read_csv_records(path: Path) -> list[dict[str, Any]]:
 
 
 def write_report_csv(rows: list[dict[str, Any]], path: Path) -> None:
+    """Write the cleaning report CSV through a temporary file."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
     dataframe = pd.DataFrame(rows, columns=REPORT_COLUMNS)
@@ -95,24 +112,34 @@ def write_report_csv(rows: list[dict[str, Any]], path: Path) -> None:
 
 
 def content_hash(text: str) -> str:
+    """Create a stable short hash for cleaned content."""
+
     return hashlib.md5(text.encode("utf-8")).hexdigest()[:16]
 
 
 def normalize_bullets(text: str) -> str:
+    """Convert common PDF bullet glyphs and dashes into simple hyphens."""
+
     for bullet in ["•", "●", "○", "▪", "▫", "–", "—"]:
         text = text.replace(bullet, "-")
     return text
 
 
 def remove_control_characters(text: str) -> str:
+    """Remove non-printing control characters that can break downstream text."""
+
     return re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", " ", text)
 
 
 def fix_broken_hyphenation(text: str) -> str:
+    """Join words split across line breaks by PDF hyphenation."""
+
     return re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)
 
 
 def normalize_whitespace(text: str) -> str:
+    """Normalize line endings, repeated spaces, and excessive blank lines."""
+
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -120,6 +147,8 @@ def normalize_whitespace(text: str) -> str:
 
 
 def remove_page_noise_lines(text: str) -> str:
+    """Drop standalone page-number lines while preserving document text."""
+
     lines = text.splitlines()
     cleaned_lines: list[str] = []
 
@@ -146,6 +175,8 @@ def remove_page_noise_lines(text: str) -> str:
 
 
 def clean_text(text: Any) -> str:
+    """Apply all text cleanup passes to a parsed document element."""
+
     if text is None:
         return ""
 
@@ -159,6 +190,8 @@ def clean_text(text: Any) -> str:
 
 
 def count_words(text: str) -> int:
+    """Count word-like tokens after cleaning."""
+
     if not text:
         return 0
     return len(re.findall(r"\b\w+\b", text))
@@ -167,6 +200,8 @@ def count_words(text: str) -> int:
 def clean_parsed_elements(
     parsed_elements: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Clean parsed elements and build rows for the cleaning report."""
+
     cleaned_rows: list[dict[str, Any]] = []
     report_rows: list[dict[str, Any]] = []
 
@@ -218,6 +253,8 @@ def belongs_to_scope(
     opportunity_id: str,
     database_target: str,
 ) -> bool:
+    """Return whether a row belongs to one opportunity/database scope."""
+
     return (
         str(row.get("opportunity_id", "") or "").strip()
         == opportunity_id
@@ -234,6 +271,8 @@ def clean_opportunity_elements(
     report_path: Path = REPORT_CSV,
     replace_existing: bool = True,
 ) -> dict[str, Any]:
+    """Clean and persist parsed elements for one uploaded RFP opportunity."""
+
     normalized_id = str(opportunity_id).strip()
 
     if not normalized_id:
@@ -305,6 +344,8 @@ def clean_all_documents(
     output_path: Path = OUTPUT_JSONL,
     report_path: Path = REPORT_CSV,
 ) -> dict[str, Any]:
+    """Clean every parsed element in the shared processed JSONL file."""
+
     if not input_path.exists():
         raise FileNotFoundError(
             f"Parsed file not found: {input_path}. "
@@ -329,6 +370,8 @@ def clean_all_documents(
 
 
 def print_summary(result: dict[str, Any]) -> None:
+    """Print the cleaning counts and output paths for CLI runs."""
+
     print("Cleaned documents saved to:", result["output_path"])
     print("Cleaning report saved to:", result["report_path"])
     print("Input elements:", result["input_element_count"])
@@ -337,6 +380,8 @@ def print_summary(result: dict[str, Any]) -> None:
 
 
 def main() -> None:
+    """CLI entry point for full or opportunity-scoped cleaning."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default=str(INPUT_JSONL))
     parser.add_argument("--output", default=str(OUTPUT_JSONL))
