@@ -1,3 +1,5 @@
+"""Create retrieval chunks from cleaned RFP and proposal knowledge elements."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -53,6 +55,8 @@ def build_splitter(
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
 ) -> RecursiveCharacterTextSplitter:
+    """Build the text splitter used by both RFP and proposal chunks."""
+
     if chunk_size <= 0:
         raise ValueError(
             "chunk_size must be greater than zero."
@@ -86,6 +90,8 @@ def build_splitter(
 def read_jsonl(
     path: Path,
 ) -> list[dict[str, Any]]:
+    """Read cleaned JSONL rows and keep original order for stable chunking."""
+
     if not path.exists():
         return []
 
@@ -112,6 +118,8 @@ def write_jsonl(
     rows: list[dict[str, Any]],
     path: Path,
 ) -> None:
+    """Write chunk rows atomically while omitting internal ordering markers."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -154,6 +162,8 @@ def write_report_csv(
     chunks: list[dict[str, Any]],
     path: Path,
 ) -> None:
+    """Write a compact CSV report for inspecting generated chunks."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -235,6 +245,8 @@ def write_report_csv(
 def is_missing(
     value: Any,
 ) -> bool:
+    """Return whether a metadata value should be treated as absent."""
+
     if value is None:
         return True
 
@@ -250,6 +262,8 @@ def is_missing(
 def normalize_scalar(
     value: Any,
 ) -> Any:
+    """Normalize metadata scalars before they are serialized into chunks."""
+
     if is_missing(value):
         return None
 
@@ -265,6 +279,8 @@ def normalize_scalar(
 def content_hash(
     text: str,
 ) -> str:
+    """Create a stable short hash for chunk IDs and content tracking."""
+
     return hashlib.md5(
         text.encode("utf-8")
     ).hexdigest()[:16]
@@ -273,6 +289,8 @@ def content_hash(
 def count_words(
     text: str,
 ) -> int:
+    """Count word-like tokens for chunk-size filtering and reporting."""
+
     if not text:
         return 0
 
@@ -287,6 +305,8 @@ def count_words(
 def compact_unique(
     values: list[Any],
 ) -> str | None:
+    """Collapse repeated metadata values into a comma-separated string."""
+
     result: list[str] = []
 
     for value in values:
@@ -317,6 +337,8 @@ def compact_unique(
 def numeric_values(
     values: list[Any],
 ) -> list[int]:
+    """Extract numeric metadata values while ignoring blanks and bad values."""
+
     numbers: list[int] = []
 
     for value in values:
@@ -336,6 +358,8 @@ def numeric_values(
 def format_element_text(
     row: dict[str, Any],
 ) -> str:
+    """Prefix element content with useful page, slide, sheet, or section context."""
+
     content = str(
         row.get(
             "content",
@@ -420,6 +444,8 @@ def build_chunk_metadata(
     chunk_text: str,
     chunk_index: int,
 ) -> dict[str, Any]:
+    """Build the searchable chunk record and carry forward source metadata."""
+
     first = elements[0]
 
     page_numbers = numeric_values(
@@ -594,6 +620,8 @@ def add_split_texts_to_chunks(
     chunks: list[dict[str, Any]],
     minimum_chunk_words: int,
 ) -> None:
+    """Append valid splitter outputs to the chunk collection."""
+
     for split_text in split_texts:
         split_text = split_text.strip()
 
@@ -601,7 +629,7 @@ def add_split_texts_to_chunks(
             continue
 
         if (
-            count_words(split_text)
+            count_words(split_text) #check this one later 
             < minimum_chunk_words
         ):
             continue
@@ -627,6 +655,8 @@ def flush_buffer(
     splitter: RecursiveCharacterTextSplitter,
     minimum_chunk_words: int,
 ) -> None:
+    """Split and emit buffered elements when a file-level chunk is complete."""
+
     if (
         not buffer_elements
         or not buffer_texts
@@ -676,6 +706,8 @@ def create_chunks_from_elements(
     minimum_chunk_words: int = MIN_CHUNK_WORDS,
     show_progress: bool = False,
 ) -> list[dict[str, Any]]:
+    """Create ordered chunks while keeping each source file grouped together."""
+
     if minimum_chunk_words < 1:
         raise ValueError(
             "minimum_chunk_words must be at least 1."
@@ -855,6 +887,8 @@ def belongs_to_scope(
     opportunity_id: str,
     database_target: str,
 ) -> bool:
+    """Return whether an element belongs to one opportunity/database scope."""
+
     return (
         str(
             row.get(
@@ -886,6 +920,8 @@ def create_chunks_for_opportunity(
     chunk_overlap: int = CHUNK_OVERLAP,
     minimum_chunk_words: int = MIN_CHUNK_WORDS,
 ) -> dict[str, Any]:
+    """Create and persist chunks for one uploaded RFP opportunity."""
+
     normalized_id = str(
         opportunity_id
     ).strip()
@@ -980,6 +1016,8 @@ def create_all_chunks(
     chunk_overlap: int = CHUNK_OVERLAP,
     minimum_chunk_words: int = MIN_CHUNK_WORDS,
 ) -> dict[str, Any]:
+    """Create chunks for every cleaned document row in the processed store."""
+
     if not input_path.exists():
         raise FileNotFoundError(
             f"Cleaned file not found: {input_path}. "
@@ -1027,6 +1065,8 @@ def create_all_chunks(
 def print_summary(
     result: dict[str, Any],
 ) -> None:
+    """Print chunking counts and distribution details for CLI runs."""
+
     print(
         "Chunks saved to:",
         result["output_path"],
@@ -1131,6 +1171,8 @@ def print_summary(
 
 
 def main() -> None:
+    """CLI entry point for full or opportunity-scoped chunk creation."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

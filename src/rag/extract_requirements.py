@@ -1,3 +1,5 @@
+"""Extract structured RFP requirements from retrieved current-opportunity context."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -169,6 +171,8 @@ REQUIREMENTS_SCHEMA = {
 def load_json(
     path: Path,
 ) -> dict[str, Any]:
+    """Load retrieved RFP context or extracted requirements JSON."""
+
     if not path.exists():
         raise FileNotFoundError(
             f"Input file not found: {path}"
@@ -185,6 +189,8 @@ def save_json(
     data: dict[str, Any],
     path: Path,
 ) -> None:
+    """Save extracted requirements JSON through a temporary file."""
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -218,6 +224,8 @@ def save_json(
 def validate_retrieved_context(
     retrieved_context: dict[str, Any],
 ) -> tuple[str, list[dict[str, Any]]]:
+    """Validate that retrieval output is scoped to one RFP opportunity."""
+
     opportunity_id = str(
         retrieved_context.get(
             "opportunity_id",
@@ -304,6 +312,8 @@ def format_chunk_for_prompt(
     chunk: dict[str, Any],
     index: int,
 ) -> str:
+    """Format one retrieved RFP chunk with citation metadata for the model."""
+
     source_file = chunk.get(
         "source_file",
         "",
@@ -386,6 +396,8 @@ def build_context(
     str,
     list[dict[str, Any]],
 ]:
+    """Build the bounded RFP context sent to requirement extraction."""
+
     if max_chars < 1:
         raise ValueError(
             "max_chars must be greater than zero."
@@ -436,6 +448,8 @@ def build_messages(
     opportunity_id: str,
     context: str,
 ) -> list[dict[str, str]]:
+    """Build the system and user messages for requirement extraction."""
+
     system_message = """
 You are an RFP requirement extraction assistant.
 
@@ -461,7 +475,7 @@ Extraction rules:
 - Keep each requirement clear and complete.
 - Prioritize mandatory requirements when visible.
 - Include submission, technical, compliance, security, delivery,
-  pricing, evaluation, legal, and business requirements when present.
+  evaluation, legal, and business requirements when present.
 - Classify each requirement using the allowed category list.
 - Use proposal_type = ["business"] for business, delivery, value,
   pricing, or timeline requirements.
@@ -494,6 +508,8 @@ def extract_requirements_with_openai(
     model: str,
     valid_chunk_ids: list[str],
 ) -> dict[str, Any]:
+    """Call OpenAI for structured requirement extraction."""
+
     requirements_schema = (
         build_requirements_schema(
             valid_chunk_ids=valid_chunk_ids
@@ -544,6 +560,8 @@ def extract_requirements_with_openai(
 def build_requirements_schema(
     valid_chunk_ids: list[str],
 ) -> dict[str, Any]:
+    """Constrain extracted requirement citations to retrieved RFP chunk IDs."""
+
     if not valid_chunk_ids:
         raise ValueError(
             "No valid RFP chunk IDs were provided."
@@ -575,6 +593,8 @@ def build_requirements_schema(
 def extract_page_numbers(
     value: Any,
 ) -> set[int]:
+    """Extract page numbers from model-returned page strings."""
+
     return {
         int(number)
         for number in re.findall(
@@ -587,6 +607,8 @@ def extract_page_numbers(
 def normalize_requirement_ids(
     requirements: list[dict[str, Any]],
 ) -> None:
+    """Assign sequential requirement IDs after validation."""
+
     for index, requirement in enumerate(
         requirements,
         start=1,
@@ -603,6 +625,8 @@ def validate_extraction(
         dict[str, Any]
     ],
 ) -> dict[str, Any]:
+    """Validate extracted requirements against included RFP chunks."""
+
     returned_opportunity = str(
         result.get(
             "opportunity_id",
@@ -864,6 +888,8 @@ def extract_requirements_from_context(
     ),
     output_path: Path | None = None,
 ) -> dict[str, Any]:
+    """Extract, validate, and optionally save requirements from retrieval output."""
+
     load_dotenv(
         override=True
     )
@@ -956,6 +982,8 @@ def extract_requirements_from_context(
 def print_summary(
     result: dict[str, Any],
 ) -> None:
+    """Print extraction counts, warnings, and category summaries."""
+
     requirements = result.get(
         "requirements",
         [],
@@ -1067,6 +1095,8 @@ def print_summary(
 
 
 def main() -> None:
+    """CLI entry point for extracting requirements from retrieved RFP context."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

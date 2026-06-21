@@ -1,3 +1,5 @@
+"""Evaluate generated proposal quality with deterministic checks and an LLM judge."""
+
 from pathlib import Path
 import argparse
 import csv
@@ -184,6 +186,8 @@ JUDGE_SCHEMA = {
 def build_judge_schema(
     expected_citation_count: int,
 ) -> dict[str, Any]:
+    """Constrain the judge response to exactly the proposal citation count."""
+
     schema = copy.deepcopy(JUDGE_SCHEMA)
 
     citation_array = schema[
@@ -214,6 +218,8 @@ def build_judge_schema(
     return schema
 ## 
 def load_json(path: Path) -> Any:
+    """Load proposal, requirements, or context JSON for evaluation."""
+
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
@@ -222,6 +228,8 @@ def load_json(path: Path) -> Any:
 
 
 def save_json(data: Any, path: Path) -> None:
+    """Save detailed generation-evaluation results."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8") as file:
@@ -237,6 +245,8 @@ def save_csv(
     rows: list[dict[str, Any]],
     path: Path,
 ) -> None:
+    """Save generation-evaluation summary rows to CSV."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if not rows:
@@ -257,6 +267,8 @@ def save_csv(
 
 
 def safe_text(value: Any) -> str:
+    """Normalize optional values before metric calculations."""
+
     if value is None:
         return ""
 
@@ -267,6 +279,8 @@ def ratio(
     numerator: int,
     denominator: int,
 ) -> float:
+    """Return a rounded ratio with zero-denominator protection."""
+
     if denominator == 0:
         return 0.0
 
@@ -276,6 +290,8 @@ def ratio(
 def expected_page_from_chunk(
     chunk: dict[str, Any],
 ) -> str:
+    """Choose the page metadata used for citation comparison."""
+
     page = (
         chunk.get("page_numbers")
         or chunk.get("page_number_start")
@@ -288,6 +304,8 @@ def expected_page_from_chunk(
 def build_proposal_chunk_map(
     proposal_context: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
+    """Map proposal_db chunk IDs to retrieved proposal knowledge chunks."""
+
     return {
         safe_text(chunk.get("chunk_id")): chunk
         for chunk in proposal_context.get("chunks", [])
@@ -299,6 +317,8 @@ def build_proposal_chunk_map(
 
 
 def extract_chunk_ids(text: str) -> list[str]:
+    """Extract chunk IDs mentioned in generated text fields."""
+
     return re.findall(
         r"chunk_[A-Za-z0-9]+",
         text or "",
@@ -310,6 +330,8 @@ def calculate_deterministic_metrics(
     extracted_requirements: dict[str, Any],
     proposal_context: dict[str, Any],
 ) -> dict[str, Any]:
+    """Calculate schema-independent coverage and citation metadata metrics."""
+
     requirements = extracted_requirements.get(
         "requirements",
         [],
@@ -573,6 +595,8 @@ def order_proposal_chunks(
     proposal: dict[str, Any],
     proposal_context: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    """Put cited chunks first so judge context prioritizes used evidence."""
+
     chunks = [
         chunk
         for chunk in proposal_context.get("chunks", [])
@@ -615,6 +639,8 @@ def format_chunk_for_judge(
     chunk: dict[str, Any],
     index: int,
 ) -> str:
+    """Format one retrieved proposal chunk for the judge prompt."""
+
     return f"""
 [PROPOSAL KNOWLEDGE {index}]
 actual_chunk_id: {safe_text(chunk.get("chunk_id"))}
@@ -632,6 +658,8 @@ def build_knowledge_context(
     proposal_context: dict[str, Any],
     max_chars: int,
 ) -> str:
+    """Build a bounded proposal-knowledge context for the judge model."""
+
     ordered_chunks = order_proposal_chunks(
         proposal=proposal,
         proposal_context=proposal_context,
@@ -672,6 +700,8 @@ def build_judge_messages(
     extracted_requirements: dict[str, Any],
     proposal_knowledge_context: str,
 ) -> list[dict[str, str]]:
+    """Build strict judge instructions for faithfulness and citation support."""
+
     system_message = """
 You are evaluating a retrieval-augmented RFP proposal.
 
@@ -882,6 +912,8 @@ def run_llm_judge(
     proposal_knowledge_context: str,
     model: str,
 ) -> dict[str, Any]:
+    """Run the LLM judge and parse its structured evaluation output."""
+
     client = OpenAI()
 
     messages = build_judge_messages(
@@ -902,7 +934,7 @@ def run_llm_judge(
     )
     completion = client.chat.completions.create(
         model=model,
-        temperature=0,
+        # temperature=0,
         messages=messages,
         response_format={
             "type": "json_schema",
@@ -938,6 +970,8 @@ def run_llm_judge(
 def normalize_five_point_score(
     score: int,
 ) -> float:
+    """Normalize a 1-to-5 judge score onto a 0-to-1 scale."""
+
     return round((score - 1) / 4, 4)
 
 
@@ -945,6 +979,8 @@ def build_derived_metrics(
     judge_result: dict[str, Any],
     expected_citation_count: int,
 ) -> dict[str, Any]:
+    """Derive support rates and composite quality from judge output."""
+
     raw_assessments = judge_result.get(
         "citation_assessment",
         [],
@@ -1136,6 +1172,8 @@ def build_derived_metrics(
 def create_human_review_template(
     path: Path,
 ) -> None:
+    """Create a blank human-review CSV template if it does not exist."""
+
     if path.exists():
         print(
             f"Human review template already exists: {path}"
@@ -1191,6 +1229,8 @@ def build_summary_row(
     derived: dict[str, Any],
     model: str,
 ) -> dict[str, Any]:
+    """Flatten deterministic and judge metrics into one CSV summary row."""
+
     return {
         "judge_model": model,
         "requirement_coverage": deterministic[
@@ -1252,6 +1292,8 @@ def print_summary(
     deterministic: dict[str, Any],
     derived: dict[str, Any],
 ) -> None:
+    """Print generation-evaluation metrics for CLI runs."""
+
     print("\nGeneration evaluation complete.")
 
     print("\nDeterministic metrics:")
@@ -1291,6 +1333,9 @@ def print_summary(
     )
 
     print("\nLLM judge metrics:")
+    if derived.get("faithfulness_score_1_to_5") is None:
+        print("LLM judge skipped.")
+        return
     print(
         "Faithfulness:",
         derived["faithfulness_score_1_to_5"],
@@ -1370,6 +1415,8 @@ def reconcile_requirement_alignment(
     return warnings
 
 def main() -> None:
+    """CLI entry point for deterministic and LLM-judge proposal evaluation."""
+
     load_dotenv()
 
     parser = argparse.ArgumentParser()
@@ -1410,7 +1457,7 @@ def main() -> None:
             "OPENAI_EVAL_MODEL",
             os.getenv(
                 "OPENAI_MODEL",
-                "gpt-4o-mini",
+                "gpt-5.5",
             ),
         ),
     )
@@ -1451,6 +1498,40 @@ def main() -> None:
         max_chars=args.max_context_chars,
     )
 
+    # print(f"Judge model: {args.judge_model}")
+    # print(
+    #     "Proposal knowledge characters sent:",
+    #     len(knowledge_context),
+    # )
+    # print(
+    #     "Proposal citations:",
+    #     len(proposal.get("citations", [])),
+    # )
+
+    # judge_result = run_llm_judge(
+    #     proposal=proposal,
+    #     extracted_requirements=(
+    #         extracted_requirements
+    #     ),
+    #     proposal_knowledge_context=(
+    #         knowledge_context
+    #     ),
+    #     model=args.judge_model,
+    # )
+    # consistency_warnings = reconcile_requirement_alignment(
+    #     judge_result=judge_result,
+    #     deterministic=deterministic,
+    # )
+    # expected_citation_count = len(
+    #     proposal.get("citations", [])
+    # )
+
+    # derived = build_derived_metrics(
+    #     judge_result=judge_result,
+    #     expected_citation_count=(
+    #         expected_citation_count
+    #     ),
+    # )
     print(f"Judge model: {args.judge_model}")
     print(
         "Proposal knowledge characters sent:",
@@ -1461,31 +1542,108 @@ def main() -> None:
         len(proposal.get("citations", [])),
     )
 
-    judge_result = run_llm_judge(
-        proposal=proposal,
-        extracted_requirements=(
-            extracted_requirements
-        ),
-        proposal_knowledge_context=(
-            knowledge_context
-        ),
-        model=args.judge_model,
-    )
-    consistency_warnings = reconcile_requirement_alignment(
-        judge_result=judge_result,
-        deterministic=deterministic,
-    )
     expected_citation_count = len(
         proposal.get("citations", [])
     )
 
-    derived = build_derived_metrics(
-        judge_result=judge_result,
-        expected_citation_count=(
-            expected_citation_count
-        ),
-    )
+    judge_disabled = safe_text(args.judge_model).lower() in {
+        "none",
+        "skip",
+        "disabled",
+        "off",
+        "",
+    }
 
+    if judge_disabled:
+        print("LLM judge skipped.")
+
+        judge_result = {
+            "faithfulness": {
+                "score": 1,
+                "rationale": (
+                    "LLM judge was skipped. Use deterministic metrics "
+                    "and human review for this run."
+                ),
+                "unsupported_claims": [],
+            },
+            "answer_relevance": {
+                "score": 1,
+                "rationale": (
+                    "LLM judge was skipped. Use human review for relevance."
+                ),
+                "irrelevant_or_missing_points": [],
+            },
+            "requirement_alignment": {
+                "score": 1,
+                "rationale": (
+                    "LLM judge was skipped. Deterministic requirement "
+                    "coverage is reported separately."
+                ),
+                "missing_requirement_ids": deterministic.get(
+                    "missing_requirement_ids",
+                    [],
+                ),
+            },
+            "professional_quality": {
+                "score": 1,
+                "rationale": (
+                    "LLM judge was skipped. Use human review for quality."
+                ),
+            },
+            "citation_assessment": [],
+            "overall_assessment": (
+                "LLM judge skipped. Deterministic metrics were still calculated."
+            ),
+        }
+
+        derived = {
+            "faithfulness_score_1_to_5": None,
+            "answer_relevance_score_1_to_5": None,
+            "requirement_alignment_score_1_to_5": None,
+            "professional_quality_score_1_to_5": None,
+            "expected_citation_count": expected_citation_count,
+            "raw_citation_assessment_count": 0,
+            "valid_citation_assessment_count": 0,
+            "supported_citation_count": None,
+            "citation_support_rate": None,
+            "mean_citation_support_score_1_to_5": None,
+            "missing_citation_indexes": [],
+            "invalid_citation_indexes": [],
+            "duplicate_citation_indexes": [],
+            "generation_quality_composite_0_to_1": None,
+            "composite_note": (
+                "LLM judge was skipped, so judge-derived metrics "
+                "and composite score were not calculated."
+            ),
+        }
+
+        consistency_warnings = [
+            "LLM judge skipped by --judge-model none."
+        ]
+
+    else:
+        judge_result = run_llm_judge(
+            proposal=proposal,
+            extracted_requirements=(
+                extracted_requirements
+            ),
+            proposal_knowledge_context=(
+                knowledge_context
+            ),
+            model=args.judge_model,
+        )
+
+        consistency_warnings = reconcile_requirement_alignment(
+            judge_result=judge_result,
+            deterministic=deterministic,
+        )
+
+        derived = build_derived_metrics(
+            judge_result=judge_result,
+            expected_citation_count=(
+                expected_citation_count
+            ),
+        )
     # warnings = []
 
     # expected_citation_count = len(

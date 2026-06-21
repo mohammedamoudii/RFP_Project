@@ -1,3 +1,5 @@
+"""Retrieve current-client RFP context from the dedicated RFP Chroma database."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,32 +24,154 @@ OUTPUT_PATH = Path(
     "data/processed/retrieved_rfp_context.json"
 )
 
+RETRIEVAL_QUERY_VERSION = (
+    "rfp_requirement_queries_v2_data_analytics"
+)
+
+
+# DEFAULT_REQUIREMENT_QUERIES = [
+#     (
+#         "submission requirements bidder response checklist "
+#         "required components schedules forms certifications "
+#         "electronic submission deadline Bonfire upload"
+#     ),
+#     (
+#         "mandatory requirements pass fail on-site work "
+#         "no additional cost evaluation criteria scoring "
+#         "rated criteria technical evaluation pricing evaluation"
+#     ),
+#     (
+#         "services deliverables scope of work data architecture "
+#         "data integration data visualization data storytelling "
+#         "data warehouse data lake analytics systems"
+#     ),
+#     (
+#         "business analysis data governance metadata management "
+#         "master data management technology advice cloud analytics "
+#         "AI machine learning project management"
+#     ),
+#     (
+#         "roles resources resumes Data Architect Data Analyst "
+#         "Data Visualization Data Storytelling Database Developer "
+#         "Business Analyst Project Manager availability interview"
+#     ),
+#     (
+#         "vendor response service requirements organization profile "
+#         "ownership legal name head office history leadership "
+#         "post-secondary references previous projects quality assurance "
+#         "risk management resource availability Microsoft analytics"
+#     ),
+#     (
+#         "corporate social ethical responsibility sustainability "
+#         "Indigenous economic development environmental responsibility "
+#         "diversity inclusion labour standards certifications"
+#     ),
+#     (
+#         "pricing schedule hourly rates all-inclusive Canadian dollars "
+#         "three-year period extension years escalators year 1 year 2 "
+#         "year 3 year 4 year 5 role pricing"
+#     ),
+# ]
+
 DEFAULT_REQUIREMENT_QUERIES = [
     (
-        "mandatory requirements submission instructions "
-        "compliance requirements"
+        "purpose definitions schedule of events due date closing date "
+        "submission deadline proposal format electronic submission Bonfire"
     ),
     (
-        "technical requirements scope of work deliverables "
-        "implementation requirements"
+        "bidder response submission requirements required components "
+        "submission checklist schedules forms certifications authorization"
     ),
     (
-        "evaluation criteria scoring criteria proposal "
-        "response requirements"
+        "questions inquiries amendments withdrawal proposal modifications "
+        "representative communication permitted channels"
     ),
     (
-        "security privacy data governance requirements"
+        "mandatory requirements pass fail on-site work no additional cost "
+        "technical pricing evaluation disqualification"
     ),
     (
-        "timeline deadline milestones project schedule "
-        "requirements"
+        "evaluation criteria scoring rated criteria company profile "
+        "qualifications experience references resumes interviews pricing"
+    ),
+    (
+        "contract negotiation award ranking selected bidder negotiations "
+        "supplementary information improved pricing performance terms"
+    ),
+    (
+        "terms and conditions confidentiality disclosure public disclosure "
+        "proposal property irrevocable acceptance period"
+    ),
+    (
+        "bidder responsibilities ambiguity conflict discrepancy omission "
+        "accuracy compensation contact person cooperation subcontractors"
+    ),
+    (
+        "conflict of interest improper influence genuine competition "
+        "Canadian dollars binding obligations laws governing law"
+    ),
+    (
+        "Schedule A bidder response checklist required submission documents "
+        "business profile vendor authorization workers compensation pricing"
+    ),
+    (
+        "Schedule B bidder information authorization authority to bind "
+        "signature certification false statements competition"
+    ),
+    (
+        "Schedule C workers compensation insurance Manitoba company "
+        "confirmation registration good standing compensation number"
+    ),
+    (
+        "Schedule D services deliverables scope of work data architecture "
+        "conceptual logical physical data models data integration"
+    ),
+    (
+        "data visualization data storytelling dashboards analytics products "
+        "data-informed decisions data warehouse data lake analytics systems"
+    ),
+    (
+        "business analysis requirements data challenges data governance "
+        "data ownership standards quality metadata master data management"
+    ),
+    (
+        "technology advice cloud analytics AI machine learning "
+        "project management technologists business subject matter experts"
+    ),
+    (
+        "roles resources Data Architect Data Analyst Database Developer "
+        "Business Analyst Data Visualization Data Storytelling Project Manager"
+    ),
+    (
+        "Schedule E vendor response organization profile ownership legal name "
+        "head office history leadership management philosophy strategy"
+    ),
+    (
+        "resumes resources availability interviews assignment Data Architect "
+        "Data Analyst Data Visualization Data Storyteller"
+    ),
+    (
+        "post-secondary experience references previous projects similar requirements "
+        "quality assurance risk management resource availability Microsoft analytics"
+    ),
+    (
+        "Schedule F corporate social ethical responsibility sustainability "
+        "Indigenous economic development environmental responsibility"
+    ),
+    (
+        "diversity inclusion equity labour standards certifications "
+        "diverse supplier social enterprise equity deserving group"
+    ),
+    (
+        "Schedule G pricing cost approach hourly rates all-inclusive "
+        "Canadian dollars year 1 year 2 year 3 year 4 year 5 escalators"
     ),
 ]
-
-
 def create_embedding_function(
     model_name: str = EMBEDDING_MODEL_NAME,
 ) -> SentenceTransformerEmbeddingFunction:
+    """Create the embedding function used for RFP semantic search."""
+
     return SentenceTransformerEmbeddingFunction(
         model_name=model_name
     )
@@ -56,6 +180,8 @@ def create_embedding_function(
 def get_collection(
     embedding_function=None,
 ):
+    """Open the current-client RFP Chroma collection."""
+
     if embedding_function is None:
         embedding_function = (
             create_embedding_function()
@@ -75,6 +201,8 @@ def preview_text(
     text: str,
     max_chars: int = 400,
 ) -> str:
+    """Create a compact preview for retrieved RFP chunks."""
+
     normalized = " ".join(
         (text or "").split()
     )
@@ -93,6 +221,8 @@ def safe_get(
     key: str,
     default: Any = "",
 ) -> Any:
+    """Read metadata values safely for display and output rows."""
+
     value = metadata.get(
         key,
         default,
@@ -109,6 +239,8 @@ def validate_retrieval_inputs(
     opportunity_id: str,
     top_k: int,
 ) -> tuple[str, str, int]:
+    """Validate and normalize one opportunity-scoped RFP retrieval request."""
+
     normalized_query = str(
         query
     ).strip()
@@ -551,6 +683,9 @@ def retrieve_rfp_context(
         "retrieval_type": (
             "rfp_requirement_context"
         ),
+        "query_version": (
+            RETRIEVAL_QUERY_VERSION
+        ),
         "opportunity_id": (
             normalized_opportunity_id
         ),
@@ -582,6 +717,8 @@ def print_results(
     rows: list[dict[str, Any]],
     max_preview: int = 10,
 ) -> None:
+    """Print retrieved RFP chunks in a compact CLI format."""
+
     print(
         "\nRetrieved unique chunks:",
         len(rows),
@@ -676,6 +813,8 @@ def save_results(
     payload: dict[str, Any],
     output_path: Path,
 ) -> None:
+    """Save retrieved RFP context JSON for requirement extraction."""
+
     output_path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -714,6 +853,8 @@ def save_results(
 
 
 def main() -> None:
+    """CLI entry point for retrieving current-opportunity RFP context."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

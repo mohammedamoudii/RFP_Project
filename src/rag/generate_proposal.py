@@ -1,3 +1,5 @@
+"""Generate structured, evidence-grounded proposals from approved knowledge."""
+
 import hashlib
 from pathlib import Path
 import argparse
@@ -220,6 +222,8 @@ def build_proposal_schema(
     valid_evidence_ids: list[str],
     valid_requirement_ids: list[str],
 ) -> dict[str, Any]:
+    """Build the strict proposal schema with allowed citation and requirement IDs."""
+
     if not valid_chunk_ids:
         raise ValueError(
             "No valid proposal knowledge "
@@ -307,6 +311,8 @@ def build_proposal_schema(
     return schema
 
 def load_json(path: Path) -> dict[str, Any]:
+    """Load proposal-generation input JSON from disk."""
+
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
@@ -315,6 +321,8 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def save_json(data: dict[str, Any], path: Path):
+    """Save proposal JSON to disk."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8") as f:
@@ -419,6 +427,8 @@ def filter_approved_evidence(
 
     return approved_catalog
 def format_requirement(req: dict[str, Any]) -> str:
+    """Format one extracted requirement for prompt context."""
+
     proposal_type = ", ".join(req.get("proposal_type", []))
 
     return f"""
@@ -438,6 +448,8 @@ def build_requirements_context(
     requirements: list[dict[str, Any]],
     max_items: int,
 ) -> str:
+    """Build the selected-requirements block used by the proposal model."""
+
     selected = requirements[:max_items]
     return "\n\n" + ("-" * 80 + "\n").join(
         format_requirement(req) for req in selected
@@ -504,6 +516,8 @@ def build_current_opportunity_context(
     extracted: dict[str, Any],
     requirements: list[dict[str, Any]],
 ) -> str:
+    """Summarize the active RFP opportunity without using proposal knowledge."""
+
     source_files = sorted({
         str(req.get("source_file", "")).strip()
         for req in requirements
@@ -534,6 +548,8 @@ def build_messages(
     evidence_context: str,
     detail_level: str,
 ) -> list[dict[str, str]]:
+    """Build the proposal-generation messages and grounding instructions."""
+
     system_message = """
 You are an RFP proposal drafting assistant.
 
@@ -795,6 +811,8 @@ def generate_proposal_with_openai(
     valid_evidence_ids: list[str],
     valid_requirement_ids: list[str],
 ) -> dict[str, Any]:
+    """Call OpenAI to generate proposal JSON constrained by the strict schema."""
+
     load_dotenv(
         dotenv_path=(
             Path(__file__)
@@ -1345,6 +1363,8 @@ def enrich_and_validate_citations(
         dict[str, Any],
     ],
 ) -> dict[str, Any]:
+    """Replace model citation claims with approved exact evidence metadata."""
+
     errors = []
 
     for index, citation in enumerate(
@@ -1449,6 +1469,8 @@ def enrich_and_validate_citations(
 def validate_citation_claim_types(
     proposal: dict[str, Any],
 ) -> list[str]:
+    """Detect citation claims that describe future work instead of evidence."""
+
     errors = []
 
     future_patterns = [
@@ -1487,6 +1509,8 @@ def validate_citation_claim_types(
 def validate_overbroad_company_claims(
     proposal: dict[str, Any],
 ) -> list[str]:
+    """Flag broad company claims that require stronger approved evidence."""
+
     errors = []
 
     fields = [
@@ -1535,6 +1559,8 @@ def validate_overbroad_company_claims(
 def validate_sensitive_company_claims(
     proposal: dict[str, Any],
 ) -> list[str]:
+    """Flag sensitive company assertions that should not be invented."""
+
     errors = []
 
     fields = [
@@ -1600,6 +1626,8 @@ def validate_citations(
     proposal: dict[str, Any],
     proposal_chunks: list[dict[str, Any]],
 ) -> list[str]:
+    """Validate citation chunk IDs and evidence reuse against proposal chunks."""
+
     warnings = []
 
     valid_chunk_ids = {
@@ -1691,6 +1719,8 @@ def validate_citations(
 
 
 def print_summary(proposal: dict[str, Any], warnings: list[str]):
+    """Print proposal-generation counts and validation warnings."""
+
     print("\nProposal generation complete.")
     print(f"Title: {proposal.get('title')}")
     print(f"Proposal type: {proposal.get('proposal_type')}")
@@ -1714,6 +1744,8 @@ def validate_historical_client_leakage(
     current_client_name: str,
     historical_client_names: list[str],
 ) -> list[str]:
+    """Detect historical-client names leaking into current-client fields."""
+
     errors = []
 
     current_client = normalize_match_text(
@@ -1771,6 +1803,8 @@ def validate_historical_client_leakage(
     return errors
 
 def main():
+    """CLI entry point for generating and validating a grounded proposal."""
+
     load_dotenv()
 
     parser = argparse.ArgumentParser()

@@ -1,3 +1,5 @@
+"""Insert validated chunks into the separated RFP and proposal Chroma stores."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -83,6 +85,8 @@ METADATA_FIELDS = [
 def read_jsonl(
     path: Path,
 ) -> list[dict[str, Any]]:
+    """Read chunk records from a JSONL file."""
+
     if not path.exists():
         return []
 
@@ -131,6 +135,8 @@ def sanitize_metadata_value(
 def build_metadata(
     chunk: dict[str, Any],
 ) -> dict[str, str | int | float | bool]:
+    """Build the Chroma-safe metadata payload for one chunk."""
+
     return {
         field: sanitize_metadata_value(
             chunk.get(field)
@@ -143,6 +149,8 @@ def batch_items(
     items: list[dict[str, Any]],
     batch_size: int,
 ) -> Iterable[list[dict[str, Any]]]:
+    """Yield fixed-size insertion batches."""
+
     if batch_size <= 0:
         raise ValueError(
             "batch_size must be greater than zero."
@@ -161,6 +169,8 @@ def batch_items(
 def create_embedding_function(
     model_name: str = EMBEDDING_MODEL_NAME,
 ) -> SentenceTransformerEmbeddingFunction:
+    """Create the sentence-transformer embedding function used by Chroma."""
+
     return SentenceTransformerEmbeddingFunction(
         model_name=model_name
     )
@@ -171,6 +181,8 @@ def get_collection(
     embedding_function,
     reset: bool = False,
 ):
+    """Open or create the configured Chroma collection for a database target."""
+
     if target_name not in TARGET_CONFIG:
         raise ValueError(
             f"Unsupported database target: {target_name}"
@@ -230,6 +242,8 @@ def validate_chunks(
     chunks: list[dict[str, Any]],
     target_name: str,
 ) -> None:
+    """Validate chunk scope, IDs, collection name, and content before insertion."""
+
     if target_name not in TARGET_CONFIG:
         raise ValueError(
             f"Unsupported database target: {target_name}"
@@ -333,6 +347,8 @@ def upsert_chunks(
     batch_size: int = BATCH_SIZE,
     show_progress: bool = True,
 ) -> None:
+    """Upsert chunk documents and metadata into Chroma in batches."""
+
     batches = list(
         batch_items(
             chunks,
@@ -645,6 +661,8 @@ def insert_target_chunks(
 
 
 def main() -> None:
+    """CLI entry point for scoped or full Chroma insertion."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

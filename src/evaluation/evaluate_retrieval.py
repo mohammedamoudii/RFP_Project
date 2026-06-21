@@ -1,3 +1,5 @@
+"""Evaluate retrieval quality against golden RFP and proposal chunk labels."""
+
 from pathlib import Path
 import argparse
 import csv
@@ -26,6 +28,8 @@ EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 def load_json(path: Path) -> Any:
+    """Load golden evaluation data or saved summaries."""
+
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
@@ -34,6 +38,8 @@ def load_json(path: Path) -> Any:
 
 
 def save_json(data: Any, path: Path) -> None:
+    """Save evaluation summary JSON."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8") as file:
@@ -41,6 +47,8 @@ def save_json(data: Any, path: Path) -> None:
 
 
 def save_csv(rows: list[dict[str, Any]], path: Path) -> None:
+    """Save detailed per-test retrieval metrics to CSV."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if not rows:
@@ -57,6 +65,8 @@ def save_csv(rows: list[dict[str, Any]], path: Path) -> None:
 
 
 def build_collections():
+    """Open both RFP and proposal Chroma collections for evaluation."""
+
     embedding_function = SentenceTransformerEmbeddingFunction(
         model_name=EMBEDDING_MODEL_NAME
     )
@@ -86,6 +96,8 @@ def build_collections():
 
 
 def determine_target(test_case: dict[str, Any]) -> str:
+    """Decide whether a golden test should query RFP or proposal knowledge."""
+
     explicit_target = test_case.get("target")
 
     if explicit_target in {"rfp", "proposal"}:
@@ -100,6 +112,8 @@ def determine_target(test_case: dict[str, Any]) -> str:
 
 
 def normalize_source(value: Any) -> str:
+    """Normalize source filenames for comparison."""
+
     return str(value or "").strip().lower()
 
 
@@ -107,6 +121,8 @@ def metadata_contains_page(
     metadata: dict[str, Any],
     expected_page: Any,
 ) -> bool:
+    """Return whether retrieved metadata contains the expected page number."""
+
     expected = str(expected_page or "").strip()
 
     if not expected:
@@ -141,6 +157,8 @@ def run_query(
     top_k: int,
     opportunity_id: str | None = None,
 ) -> dict[str, Any]:
+    """Run one retrieval query, optionally scoped to an RFP opportunity."""
+
     n_results = min(top_k, collection.count())
 
     query_arguments = {
@@ -165,6 +183,8 @@ def first_relevant_rank(
     retrieved_ids: list[str],
     expected_ids: set[str],
 ) -> int | None:
+    """Return the first rank containing a golden chunk ID."""
+
     for rank, chunk_id in enumerate(retrieved_ids, start=1):
         if chunk_id in expected_ids:
             return rank
@@ -177,6 +197,8 @@ def evaluate_test_case(
     collections: dict[str, Any],
     top_k: int,
 ) -> dict[str, Any]:
+    """Evaluate one golden retrieval case and return metric fields."""
+
     target = determine_target(test_case)
     collection = collections[target]
 
@@ -368,6 +390,8 @@ def average(
     rows: list[dict[str, Any]],
     field: str,
 ) -> float | None:
+    """Average a numeric metric field while ignoring blanks."""
+
     values = []
 
     for row in rows:
@@ -388,6 +412,8 @@ def build_summary(
     rows: list[dict[str, Any]],
     top_k: int,
 ) -> dict[str, Any]:
+    """Aggregate detailed retrieval rows into overall and per-target metrics."""
+
     rfp_rows = [
         row for row in rows
         if row["target"] == "rfp"
@@ -399,6 +425,8 @@ def build_summary(
     ]
 
     def metric_summary(selected_rows):
+        """Summarize one subset of retrieval rows."""
+
         return {
             "test_count": len(selected_rows),
             "mean_precision_at_k": average(
@@ -473,6 +501,8 @@ def build_summary(
 
 
 def print_summary(summary: dict[str, Any]) -> None:
+    """Print the main retrieval metrics for CLI runs."""
+
     overall = summary["overall"]
 
     print("\nRetrieval evaluation complete.")
@@ -515,6 +545,8 @@ def print_summary(summary: dict[str, Any]) -> None:
 
 
 def main() -> None:
+    """CLI entry point for golden retrieval evaluation."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

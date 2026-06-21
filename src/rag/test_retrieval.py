@@ -1,3 +1,5 @@
+"""Manual retrieval smoke tests for the RFP and proposal Chroma collections."""
+
 from pathlib import Path
 import argparse
 import json
@@ -33,6 +35,8 @@ TARGET_CONFIG = {
 
 
 def get_collection(target: str):
+    """Open the requested Chroma collection with the shared embedding model."""
+
     if target not in TARGET_CONFIG:
         raise ValueError(f"Unknown target: {target}")
 
@@ -53,6 +57,8 @@ def get_collection(target: str):
 
 
 def safe_get(metadata: dict, key: str, default: str = ""):
+    """Read metadata values while converting missing values to a fallback."""
+
     value = metadata.get(key, default)
 
     if value is None:
@@ -62,6 +68,8 @@ def safe_get(metadata: dict, key: str, default: str = ""):
 
 
 def preview_text(text: str, max_chars: int = 450) -> str:
+    """Create a compact single-line preview for terminal output."""
+
     text = " ".join((text or "").split())
 
     if len(text) <= max_chars:
@@ -71,6 +79,8 @@ def preview_text(text: str, max_chars: int = 450) -> str:
 
 
 def run_query(target: str, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    """Run one semantic query against the selected collection."""
+
     collection = get_collection(target)
 
     results = collection.query(
@@ -120,6 +130,8 @@ def run_query(target: str, query: str, top_k: int = 5) -> list[dict[str, Any]]:
 
 
 def print_results(rows: list[dict[str, Any]]):
+    """Print ranked retrieval rows in a human-readable format."""
+
     if not rows:
         print("No results found.")
         return
@@ -156,6 +168,8 @@ def print_results(rows: list[dict[str, Any]]):
 
 
 def save_results(all_rows: list[dict[str, Any]]):
+    """Persist retrieval smoke-test results for later inspection."""
+
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with OUTPUT_PATH.open("w", encoding="utf-8") as f:
@@ -165,6 +179,8 @@ def save_results(all_rows: list[dict[str, Any]]):
 
 
 def main():
+    """CLI entry point for running the built-in retrieval smoke tests."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -192,7 +208,7 @@ def main():
     all_rows = []
 
     if args.target in ["rfp", "both"]:
-        rfp_query = args.query or "mandatory requirements submission instructions evaluation criteria technical requirements"
+        rfp_query = args.query or "mandatory requirements submission instructions evaluation criteria technical requirements" # check this one later
         rfp_rows = run_query(
             target="rfp",
             query=rfp_query,

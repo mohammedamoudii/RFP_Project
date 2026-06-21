@@ -1,3 +1,5 @@
+"""Quick smoke test for loading the OpenAI API key and making one request."""
+
 import os
 from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
